@@ -5,7 +5,7 @@ COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY gradle ./gradle
 RUN ./gradlew --no-daemon --quiet dependencies > /dev/null
 COPY src ./src
-RUN ./gradlew --no-daemon --quiet check shadowJar copyAgent
+RUN ./gradlew --no-daemon check shadowJar copyAgent
 {%- if database == 'sqlite' %}
 # The SQLite driver's native library, unpacked here: by default the driver writes it to /tmp and loads it
 # from there, which fails where /tmp is mounted noexec.
