@@ -30,7 +30,7 @@ Shared by every Kotlin app and kept at the top level: [`.github/workflows/app.ym
 | | Value | Where |
 | --- | --- | --- |
 | Port (web) | `8080` | `application.properties` |
-| Health path (web) | `GET /healthz` returns `{"ok":true}` (with a database, only once it answers) | `HttpController.kt` |
+| Health path (web) | `GET /healthz` returns `{"ok":true}` once the app has started (with a database, after it opened and migrated) | `HttpController.kt` |
 | Start-up | up to 120 s before liveness checks begin (`startupSeconds` in `swhurl.yaml`): a JVM with the agent starts in about 10 s, longer on a busy node | `swhurl.yaml` |
 | Resources | 100m CPU, 192Mi memory, limit 384Mi (the heap is 70% of the limit) | `swhurl.yaml`, `Dockerfile` |
 | User | UID 65532, read-only root filesystem friendly (writes only to `/tmp`, and `/data` with a database) | distroless `nonroot` base image |
