@@ -9,7 +9,6 @@ plugins {
 version = "0.1"
 group = "com.swhurl.app"
 
-val kotlinVersion = project.properties["kotlinVersion"]
 // The template's answers (gradle.properties). Plain Kotlin here rather than a template file, so
 // Renovate can read and update every version below.
 val kind = providers.gradleProperty("swhurl.kind").get()
@@ -27,8 +26,9 @@ dependencies {
     ksp("io.micronaut.serde:micronaut-serde-processor")
     implementation("io.micronaut.kotlin:micronaut-kotlin-runtime")
     implementation("io.micronaut.serde:micronaut-serde-jackson")
-    implementation("org.jetbrains.kotlin:kotlin-reflect:${kotlinVersion}")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:${kotlinVersion}")
+    // kotlin-stdlib comes with the Kotlin plugin, and kotlin("reflect") takes the plugin's version, so both
+    // always match the compiler that Renovate updates in the plugins block.
+    implementation(kotlin("reflect"))
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("tools.jackson.module:jackson-module-kotlin")
     if (kind == "web") {
