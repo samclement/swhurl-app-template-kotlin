@@ -3,6 +3,16 @@
   "description": "Renovate rules shared by every app built from the swhurl Kotlin template. Apps extend this file (github>samclement/swhurl-app-template-kotlin:renovate-preset), so a change here reaches all of them on Renovate's next run.",
   "extends": ["config:recommended"],
   "dependencyDashboard": true,
+  "customManagers": [
+    {
+      "description": "Micronaut's platform version lives in gradle.properties (micronautVersion), where Gradle's own manager does not look; gradle.properties.jinja is the template's copy.",
+      "customType": "regex",
+      "managerFilePatterns": ["/(^|/)gradle\\.properties(\\.jinja)?$/"],
+      "matchStrings": ["micronautVersion=(?<currentValue>\\S+)"],
+      "depNameTemplate": "io.micronaut.platform:micronaut-platform",
+      "datasourceTemplate": "maven"
+    }
+  ],
   "packageRules": [
     {
       "description": "Kotlin and its compiler plugins release together; update them in one PR.",
@@ -10,7 +20,7 @@
       "groupName": "Kotlin"
     },
     {
-      "description": "Micronaut's Gradle plugins release together.",
+      "description": "Micronaut's Gradle plugins and its platform version (micronautVersion) release together.",
       "matchPackageNames": ["/^io\\.micronaut\\./"],
       "groupName": "Micronaut"
     },
