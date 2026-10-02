@@ -1,7 +1,7 @@
 plugins {
     id("org.jetbrains.kotlin.jvm") version "2.3.21"
     id("org.jetbrains.kotlin.plugin.allopen") version "2.3.21"
-    id("com.google.devtools.ksp") version "2.3.7"
+    id("com.google.devtools.ksp") version "2.3.12"
     id("io.micronaut.application") version "5.0.2"
     id("com.gradleup.shadow") version "9.4.1"
 }
