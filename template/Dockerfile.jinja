@@ -1,11 +1,14 @@
-# Build with the full JDK, then ship only a trimmed Java runtime (jlink) on a distroless base.
+# Check and package once with the full JDK, then ship only a trimmed Java runtime (jlink) on a distroless base.
 FROM eclipse-temurin:25-jdk AS build
 WORKDIR /src
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
 COPY gradle ./gradle
 RUN ./gradlew --no-daemon --quiet dependencies > /dev/null
 COPY src ./src
-RUN ./gradlew --no-daemon --quiet shadowJar copyAgent -x test
+{%- if database == 'sqlite' %}
+COPY migrations ./migrations
+{%- endif %}
+RUN ./gradlew --no-daemon check shadowJar copyAgent
 {%- if database == 'sqlite' %}
 # The SQLite driver's native library, unpacked here: by default the driver writes it to /tmp and loads it
 # from there, which fails where /tmp is mounted noexec.

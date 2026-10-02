@@ -65,3 +65,17 @@ val copyAgent by tasks.registering(Copy::class) {
     into(layout.buildDirectory.dir("agent"))
     rename { "opentelemetry-javaagent.jar" }
 }
+
+if (database == "sqlite") {
+    // Docker build environments can mount /tmp as noexec, which prevents sqlite-jdbc from loading
+    // its extracted native library. Keep the test-only extraction directory inside the build tree.
+    tasks.withType<Test>().configureEach {
+        val sqliteTmp = layout.buildDirectory.dir("sqlite-tmp").get().asFile
+        systemProperty("org.sqlite.tmpdir", sqliteTmp.absolutePath)
+        doFirst { sqliteTmp.mkdirs() }
+        testLogging {
+            events("failed")
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
+    }
+}
