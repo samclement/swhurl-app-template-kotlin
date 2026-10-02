@@ -3,9 +3,9 @@ name: App
 # The checks and image build every swhurl app runs, shared from the template: each app's
 # .github/workflows/container.yml calls this file at
 # samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@main, so a fix here reaches
-# every app on its next run (like renovate-preset.json). Pull requests: compile, test, build the
-# image and smoke-test it (it starts, answers /healthz and keeps running). Pushes to main then push
-# the image to GHCR tagged <run number>-<short sha> (for example 42-a1b2c3d); the platform's image
+# every app on its next run (like renovate-preset.json). The image build runs Gradle checks and packages
+# the app in one invocation, then smoke-tests it (it starts, answers /healthz and keeps running).
+# Pushes to main then push the image to GHCR tagged <run number>-<short sha> (for example 42-a1b2c3d); the platform's image
 # automation deploys the highest run number to staging, and the job summary prints image@digest.
 # The template's own Template workflow calls it with template: true: it renders the template with
 # Copier into ./app (as the platform's make app-repo does), checks and smoke-tests that, and publishes
@@ -58,18 +58,6 @@ jobs:
           uvx copier@9.18.2 copy --defaults --vcs-ref HEAD --data app_name=smoke-app "${data[@]}" . app
           test -f app/.copier-answers.yml && test -f app/swhurl.yaml && grep -q '^# smoke-app$' app/README.md
           cat app/swhurl.yaml
-
-      - name: Setup Java
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '25'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Compile and test
-        run: ./gradlew --no-daemon check
 
       - name: Image name and tag
         id: meta

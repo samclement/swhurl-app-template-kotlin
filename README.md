@@ -56,6 +56,6 @@ curl http://localhost:8080/healthz      # web
 
 ## Checks and dependency updates
 
-Every pull request and every push to `main` of an app runs the same checks from the shared `app.yml`: `./gradlew check` (compile and tests), an image build, and a smoke test that starts the image the way the cluster does (read-only root filesystem, `/tmp` and with a database `/data` writable), read from the app's `swhurl.yaml`: a web app must answer its health path and `/`, and every app must stay up. Only `main` pushes the image.
+Every pull request and every push to `main` of an app runs the same checks from the shared `app.yml`: the image build runs `./gradlew check shadowJar copyAgent` once, then a smoke test that starts the image the way the cluster does (read-only root filesystem, `/tmp` and with a database `/data` writable), read from the app's `swhurl.yaml`: a web app must answer its health path and `/`, and every app must stay up. Only `main` pushes the image.
 
 [Renovate](https://docs.renovatebot.com/) opens the update pull requests; each app's `renovate.json` extends this repository's [`renovate-preset.json`](renovate-preset.json): minor, patch and digest updates merge themselves once every check passes, majors wait for you, and Kotlin and Micronaut plugins are grouped. Keep tests for what the app does; an app without them should set `"automerge": false`.
