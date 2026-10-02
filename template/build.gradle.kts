@@ -73,5 +73,9 @@ if (database == "sqlite") {
         val sqliteTmp = layout.buildDirectory.dir("sqlite-tmp").get().asFile
         systemProperty("org.sqlite.tmpdir", sqliteTmp.absolutePath)
         doFirst { sqliteTmp.mkdirs() }
+        testLogging {
+            events("failed")
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
     }
 }
