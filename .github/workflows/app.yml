@@ -73,9 +73,16 @@ jobs:
 
       - name: Image name and tag
         id: meta
+        env:
+          ANSWERS: ${{ inputs.answers }}
         run: |
           echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           echo "tag=${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          # One build cache per template combination: parallel matrix jobs sharing a scope overwrite each
+          # other's cache, so every run rebuilt from the dependency layer. An app keeps the default scope.
+          scope=buildkit
+          if [ -n "$ANSWERS" ]; then scope="template-$(tr ' =' '-_' <<<"$ANSWERS")"; fi
+          echo "cache=type=gha,scope=$scope" >> "$GITHUB_OUTPUT"
 
       - name: Setup Buildx
         uses: docker/setup-buildx-action@v4
@@ -87,8 +94,8 @@ jobs:
           platforms: linux/amd64
           load: true
           tags: app:smoke
-          cache-to: type=gha,mode=max
-          cache-from: type=gha
+          cache-to: ${{ steps.meta.outputs.cache }},mode=max
+          cache-from: ${{ steps.meta.outputs.cache }}
 
       # Runs the image as the cluster does, from the app's swhurl.yaml (a web app on /healthz without one):
       # read-only root filesystem with a writable /tmp, the database (if any) on a writable /data. A web app
@@ -132,7 +139,7 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
-          cache-from: type=gha
+          cache-from: ${{ steps.meta.outputs.cache }}
 
       - name: Record the image
         if: env.PUBLISH == 'true'
