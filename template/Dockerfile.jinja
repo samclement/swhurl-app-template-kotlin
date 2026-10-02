@@ -6,6 +6,11 @@ COPY gradle ./gradle
 RUN ./gradlew --no-daemon --quiet dependencies > /dev/null
 COPY src ./src
 RUN ./gradlew --no-daemon --quiet shadowJar copyAgent -x test
+{%- if database == 'sqlite' %}
+# The SQLite driver's native library, unpacked here: by default the driver writes it to /tmp and loads it
+# from there, which fails where /tmp is mounted noexec.
+RUN mkdir /native && cd /native && jar xf /src/build/libs/app-0.1-all.jar org/sqlite/native/Linux/x86_64/libsqlitejdbc.so
+{%- endif %}
 # The Java modules the app, Micronaut and the OpenTelemetry agent use; a missing one fails the smoke test.
 RUN jlink --add-modules java.base,java.desktop,java.instrument,java.logging,java.management,java.naming,java.net.http,java.sql,java.xml,jdk.crypto.ec,jdk.jfr,jdk.management,jdk.unsupported \
       --strip-debug --no-man-pages --no-header-files --compress=zip-6 --output /jre
@@ -16,6 +21,7 @@ WORKDIR /app
 COPY --from=build --chown=65532:65532 /src/build/libs/app-0.1-all.jar /app/app.jar
 COPY --from=build --chown=65532:65532 /src/build/agent/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
 {%- if database == 'sqlite' %}
+COPY --from=build /native/org/sqlite/native/Linux/x86_64/libsqlitejdbc.so /app/native/libsqlitejdbc.so
 COPY --chown=65532:65532 migrations ./migrations
 {%- endif %}
 # OpenTelemetry: the agent sends traces and metrics; the platform injects where to (OTEL_EXPORTER_OTLP_ENDPOINT,
@@ -30,4 +36,8 @@ EXPOSE 8080
 # Heap from the container's memory limit; serial GC suits one small container.
 # Only the fast JIT tier: a small app starts in a fraction of the time (the agent instruments classes as
 # they load) for a little peak speed. Native access: the SQLite driver loads its native library.
-ENTRYPOINT ["/opt/java/bin/java", "-XX:MaxRAMPercentage=70", "-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1", "-XX:+ExitOnOutOfMemoryError", "--enable-native-access=ALL-UNNAMED", "-javaagent:/app/opentelemetry-javaagent.jar", "-jar", "/app/app.jar"]
+ENTRYPOINT ["/opt/java/bin/java", "-XX:MaxRAMPercentage=70", "-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1", "-XX:+ExitOnOutOfMemoryError", "--enable-native-access=ALL-UNNAMED",
+{%- if database == 'sqlite' %}
+            "-Dorg.sqlite.lib.path=/app/native", "-Dorg.sqlite.lib.name=libsqlitejdbc.so",
+{%- endif %}
+            "-javaagent:/app/opentelemetry-javaagent.jar", "-jar", "/app/app.jar"]

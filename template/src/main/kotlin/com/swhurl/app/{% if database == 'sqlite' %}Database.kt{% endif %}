@@ -1,8 +1,8 @@
 package com.swhurl.app
 
 import io.micronaut.context.annotation.Value
+import io.micronaut.context.annotation.Context
 import jakarta.annotation.PreDestroy
-import jakarta.inject.Singleton
 import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
@@ -13,8 +13,9 @@ import kotlin.io.path.readText
 
 // The app's SQLite database. On the platform DATABASE_PATH is /data/app.db, a file on a volume that
 // outlives the pod, backed up nightly (one copy of the app runs at a time, so one connection is enough).
-// Locally it defaults to app.db here.
-@Singleton
+// Locally it defaults to app.db here. @Context: opened (and migrated) at startup, so a database that
+// cannot open stops the app at once instead of failing on first use.
+@Context
 class Database(
     @Value("\${database.path:app.db}") path: String,
     @Value("\${migrations.dir:migrations}") migrations: String,
