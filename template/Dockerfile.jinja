@@ -36,8 +36,9 @@ EXPOSE 8080
 # Heap from the container's memory limit; serial GC suits one small container.
 # Only the fast JIT tier: a small app starts in a fraction of the time (the agent instruments classes as
 # they load) for a little peak speed. Native access: the SQLite driver loads its native library.
-ENTRYPOINT ["/opt/java/bin/java", "-XX:MaxRAMPercentage=70", "-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1", "-XX:+ExitOnOutOfMemoryError", "--enable-native-access=ALL-UNNAMED",
+ENTRYPOINT ["/opt/java/bin/java", "-XX:MaxRAMPercentage=70", "-XX:+UseSerialGC", "-XX:TieredStopAtLevel=1", "-XX:+ExitOnOutOfMemoryError", \
+            "--enable-native-access=ALL-UNNAMED", \
 {%- if database == 'sqlite' %}
-            "-Dorg.sqlite.lib.path=/app/native", "-Dorg.sqlite.lib.name=libsqlitejdbc.so",
+            "-Dorg.sqlite.lib.path=/app/native", "-Dorg.sqlite.lib.name=libsqlitejdbc.so", \
 {%- endif %}
             "-javaagent:/app/opentelemetry-javaagent.jar", "-jar", "/app/app.jar"]
