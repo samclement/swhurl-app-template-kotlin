@@ -32,8 +32,6 @@ class Database(
         migrate(Path.of(migrations))
     }
 
-    fun check() = withConnection { it.createStatement().use { s -> s.executeQuery("SELECT 1").close() } }
-
     fun recordVisit(path: String): Long = withConnection { c ->
         c.prepareStatement("INSERT INTO events (kind, detail, at) VALUES ('visit', ?, ?)").use {
             it.setString(1, path); it.setString(2, Instant.now().toString()); it.executeUpdate()

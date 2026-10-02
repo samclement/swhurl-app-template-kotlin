@@ -29,14 +29,10 @@ class HttpController(
 ) {
     private val log = LoggerFactory.getLogger(HttpController::class.java)
 
-    // The platform's readiness and liveness probe.
+    // The platform's readiness and liveness probe. It needs nothing else: the app answers only once
+    // started{% if database == 'sqlite' %}, and the database opens (and migrates) at startup{% endif %}. Probe requests are not traced.
     @Get("/healthz")
-    fun health(): Health {
-{%- if database == 'sqlite' %}
-        database.check() // ready only when the database answers
-{%- endif %}
-        return Health(true)
-    }
+    fun health(): Health = Health(true)
 
     // Sign-in happens before requests reach the app; X-Auth-Request-Email names the signed-in user.
     @Get("/")
