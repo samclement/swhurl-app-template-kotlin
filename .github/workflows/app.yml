@@ -1,0 +1,149 @@
+name: App
+
+# The checks and image build every swhurl app runs, shared from the template: each app's
+# .github/workflows/container.yml calls this file at
+# samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@main, so a fix here reaches
+# every app on its next run (like renovate-preset.json). Pull requests: compile, test, build the
+# image and smoke-test it (it starts, answers /healthz and keeps running). Pushes to main then push
+# the image to GHCR tagged <run number>-<short sha> (for example 42-a1b2c3d); the platform's image
+# automation deploys the highest run number to staging, and the job summary prints image@digest.
+# The template's own Template workflow calls it with template: true: it renders the template with
+# Copier into ./app (as the platform's make app-repo does), checks and smoke-tests that, and publishes
+# nothing.
+
+on:
+  workflow_call:
+    inputs:
+      template:
+        description: Render the Copier template into ./app and check that instead (publishes nothing)
+        type: boolean
+        default: false
+      answers:
+        description: "With template: Copier answers, space-separated key=value (for example kind=worker database=sqlite)"
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Check, build and smoke-test
+    runs-on: ubuntu-latest
+    env:
+      APP_DIR: ${{ inputs.template && 'app' || '.' }}
+      PUBLISH: ${{ !inputs.template && github.event_name != 'pull_request' }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.template && 'app' || '.' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup uv (template only)
+        if: inputs.template
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: false
+
+      - name: Render the template (template only)
+        if: inputs.template
+        working-directory: .
+        env:
+          ANSWERS: ${{ inputs.answers }}
+        run: |
+          data=()
+          for answer in $ANSWERS; do data+=(--data "$answer"); done
+          uvx copier@9.18.2 copy --defaults --vcs-ref HEAD --data app_name=smoke-app "${data[@]}" . app
+          test -f app/.copier-answers.yml && test -f app/swhurl.yaml && grep -q '^# smoke-app$' app/README.md
+          cat app/swhurl.yaml
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Compile and test
+        run: ./gradlew --no-daemon check
+
+      - name: Image name and tag
+        id: meta
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_RUN_NUMBER}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build the image
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ env.APP_DIR }}
+          platforms: linux/amd64
+          load: true
+          tags: app:smoke
+          cache-to: type=gha,mode=max
+          cache-from: type=gha
+
+      # Runs the image as the cluster does, from the app's swhurl.yaml (a web app on /healthz without one):
+      # read-only root filesystem with a writable /tmp, the database (if any) on a writable /data. A web app
+      # must answer its health path and /; every app must keep running.
+      - name: Smoke test (starts, answers its health path if web, keeps running)
+        run: |
+          set -Eeuo pipefail
+          field() { if [ -f swhurl.yaml ]; then sed -n "s/^$1: *//p" swhurl.yaml | head -1; fi; }
+          kind=$(field kind); kind=${kind:-web}; database=$(field database)
+          args=(--read-only --tmpfs /tmp)
+          if [ "$database" = sqlite ]; then args+=(--tmpfs /data:mode=1777 -e DATABASE_PATH=/data/app.db); fi
+          if [ "$kind" = web ]; then args+=(-p 18080:8080); fi
+          docker run -d --name smoke "${args[@]}" app:smoke
+          if [ "$kind" = web ]; then
+            path=$(field healthPath); path=${path:-/healthz}
+            for _ in $(seq 1 30); do
+              curl -fsS "http://127.0.0.1:18080$path" && break
+              sleep 1
+            done
+            curl -fsS "http://127.0.0.1:18080$path" >/dev/null || { docker logs smoke; exit 1; }
+            curl -fsS http://127.0.0.1:18080/ >/dev/null || { docker logs smoke; exit 1; }
+          fi
+          sleep 10
+          [ "$(docker inspect -f '{{.State.Running}}' smoke)" = true ] || { docker logs smoke; exit 1; }
+          echo "smoke test passed ($kind${database:+, $database})"
+
+      - name: Login to GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push the image
+        if: env.PUBLISH == 'true'
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ env.APP_DIR }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+
+      - name: Record the image
+        if: env.PUBLISH == 'true'
+        run: |
+          {
+            echo "### Published"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}@${{ steps.push.outputs.digest }}"
+            echo '```'
+            echo
+            echo "Staging instances created with the swhurl presets deploy this automatically. For a new"
+            echo "instance, paste the line above into the console's New app Image field."
+          } >> "$GITHUB_STEP_SUMMARY"

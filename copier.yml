@@ -1,0 +1,35 @@
+# Copier template for a swhurl Kotlin (Micronaut) app. The platform renders it with
+# `make app-repo NAME=<app> STACK=kotlin` or the console's New app (swhurl-platform).
+# By hand: uvx copier copy --data app_name=<app> gh:samclement/swhurl-app-template-kotlin <dir>
+_min_copier_version: "9.18"
+_subdirectory: template
+_answers_file: .copier-answers.yml
+
+app_name:
+  type: str
+  help: The app's name (its repository, image and platform name)
+  validator: >-
+    {% if not (app_name | regex_search('^[a-z]([a-z0-9-]{0,38}[a-z0-9])?$')) %}
+    must be a DNS label: lowercase letters, digits and hyphens, at most 40 characters
+    {% endif %}
+
+description:
+  type: str
+  help: One line saying what the app does
+  default: A swhurl app
+
+kind:
+  type: str
+  help: "web: an HTTP service with a health endpoint; worker: a background process with no web address"
+  choices:
+    web: web
+    worker: worker
+  default: web
+
+database:
+  type: str
+  help: "sqlite: a database file the platform keeps on a volume, backed up nightly, with migrations at startup"
+  choices:
+    none: none
+    sqlite: sqlite
+  default: none

@@ -1,0 +1,11 @@
+<configuration>
+    <!-- JSON on stdout, one object per line: the platform collects stdout. With the OpenTelemetry agent
+         each line carries trace_id and span_id in its mdc. -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="ch.qos.logback.classic.encoder.JsonEncoder"/>
+    </appender>
+
+    <root level="${LOG_LEVEL:-info}">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

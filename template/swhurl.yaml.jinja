@@ -1,0 +1,22 @@
+# What this app needs from the swhurl platform. Read by the platform's `make app-new --from-repo`;
+# fields: https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#swhurlyaml
+version: 1
+stack: kotlin
+kind: {{ kind }}
+{%- if kind == 'web' %}
+port: 8080
+healthPath: /healthz
+# A JVM with the OpenTelemetry agent starts in about 10 s, longer on a busy node: liveness waits for it.
+startupSeconds: 120
+{%- endif %}
+uid: 65532
+telemetry: otlp
+autoDeploy: true
+{%- if database == 'sqlite' %}
+database: sqlite
+{%- endif %}
+# The JVM needs more than the platform's defaults (10m, 32Mi, limit 128Mi).
+resources:
+  cpu: 100m
+  memory: 192Mi
+  memoryLimit: 384Mi

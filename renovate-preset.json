@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate rules shared by every app built from the swhurl Kotlin template. Apps extend this file (github>samclement/swhurl-app-template-kotlin:renovate-preset), so a change here reaches all of them on Renovate's next run.",
+  "extends": ["config:recommended"],
+  "dependencyDashboard": true,
+  "packageRules": [
+    {
+      "description": "Kotlin and its compiler plugins release together; update them in one PR.",
+      "matchPackageNames": ["/^org\\.jetbrains\\.kotlin/", "com.google.devtools.ksp"],
+      "groupName": "Kotlin"
+    },
+    {
+      "description": "Micronaut's Gradle plugins release together.",
+      "matchPackageNames": ["/^io\\.micronaut\\./"],
+      "groupName": "Micronaut"
+    },
+    {
+      "description": "Minor, patch and digest updates merge themselves once every check passes (compile, tests, image build, smoke test). Each merge deploys to staging; production changes only through a promote. Apps without tests set automerge to false in their renovate.json.",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Major updates wait for a person.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false
+    }
+  ]
+}

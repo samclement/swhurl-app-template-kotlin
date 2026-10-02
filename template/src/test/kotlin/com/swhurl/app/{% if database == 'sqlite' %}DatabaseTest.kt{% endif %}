@@ -1,0 +1,26 @@
+package com.swhurl.app
+
+import java.nio.file.Files
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
+
+// Migrations apply once each, and data outlives a reopen.
+class DatabaseTest {
+    @Test
+    fun `migrations apply once and data persists`() {
+        val path = Files.createTempDirectory("app").resolve("app.db").toString()
+        Database(path, "migrations").use { db ->
+            db.recordRun("test")
+            db.withConnection { c -> c.createStatement().use { s -> s.executeQuery("SELECT count(*) FROM sqlite_master WHERE name = 'events_kind'").use { assertEquals(1, it.getInt(1)) } } }
+        }
+        Database(path, "migrations").use { db ->
+            db.withConnection { c ->
+                c.createStatement().use { s ->
+                    s.executeQuery("SELECT count(*) FROM schema_migrations").use { assertEquals(1, it.getInt(1)) }
+                    s.executeQuery("SELECT count(*) FROM events").use { assertEquals(1, it.getInt(1)) }
+                    s.executeQuery("PRAGMA journal_mode").use { assertEquals("wal", it.getString(1)) }
+                }
+            }
+        }
+    }
+}

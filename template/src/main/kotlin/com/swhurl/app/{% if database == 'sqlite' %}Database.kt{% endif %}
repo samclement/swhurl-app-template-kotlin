@@ -1,0 +1,85 @@
+package com.swhurl.app
+
+import io.micronaut.context.annotation.Value
+import jakarta.annotation.PreDestroy
+import jakarta.inject.Singleton
+import java.nio.file.Files
+import java.nio.file.Path
+import java.sql.Connection
+import java.sql.DriverManager
+import java.time.Instant
+import kotlin.io.path.name
+import kotlin.io.path.readText
+
+// The app's SQLite database. On the platform DATABASE_PATH is /data/app.db, a file on a volume that
+// outlives the pod, backed up nightly (one copy of the app runs at a time, so one connection is enough).
+// Locally it defaults to app.db here.
+@Singleton
+class Database(
+    @Value("\${database.path:app.db}") path: String,
+    @Value("\${migrations.dir:migrations}") migrations: String,
+) : AutoCloseable {
+    private val connection: Connection = DriverManager.getConnection("jdbc:sqlite:$path")
+
+    init {
+        connection.createStatement().use {
+            // WAL lets the platform's backup copy the database while the app writes.
+            it.execute("PRAGMA journal_mode = WAL")
+            it.execute("PRAGMA busy_timeout = 5000")
+            it.execute("PRAGMA foreign_keys = ON")
+        }
+        migrate(Path.of(migrations))
+    }
+
+    fun check() = withConnection { it.createStatement().use { s -> s.executeQuery("SELECT 1").close() } }
+
+    fun recordVisit(path: String): Long = withConnection { c ->
+        c.prepareStatement("INSERT INTO events (kind, detail, at) VALUES ('visit', ?, ?)").use {
+            it.setString(1, path); it.setString(2, Instant.now().toString()); it.executeUpdate()
+        }
+        c.createStatement().use { it.executeQuery("SELECT count(*) FROM events WHERE kind = 'visit'").use { r -> r.getLong(1) } }
+    }
+
+    fun recordRun(detail: String) = withConnection { c ->
+        c.prepareStatement("INSERT INTO events (kind, detail, at) VALUES ('run', ?, ?)").use {
+            it.setString(1, detail); it.setString(2, Instant.now().toString()); it.executeUpdate()
+        }
+    }
+
+    @Synchronized
+    fun <T> withConnection(block: (Connection) -> T): T = block(connection)
+
+    // Migrations: migrations/NNN_name.sql, applied once each, in name order, at startup, each in a
+    // transaction and recorded in schema_migrations. Add a new file for every change; never edit one
+    // that has run (staging and production each keep their own database).
+    @Synchronized
+    fun migrate(directory: Path): List<String> {
+        connection.createStatement().use {
+            it.executeUpdate("CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)")
+        }
+        val applied = connection.createStatement().use {
+            it.executeQuery("SELECT name FROM schema_migrations").use { r -> generateSequence { if (r.next()) r.getString(1) else null }.toSet() }
+        }
+        val pending = Files.list(directory).use { files -> files.filter { it.name.endsWith(".sql") }.sorted().toList() }
+            .filter { it.name !in applied }
+        for (file in pending) {
+            connection.autoCommit = false
+            try {
+                connection.createStatement().use { it.executeUpdate(file.readText()) }
+                connection.prepareStatement("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)").use {
+                    it.setString(1, file.name); it.setString(2, Instant.now().toString()); it.executeUpdate()
+                }
+                connection.commit()
+            } catch (error: Exception) {
+                connection.rollback()
+                throw error
+            } finally {
+                connection.autoCommit = true
+            }
+        }
+        return pending.map { it.name }
+    }
+
+    @PreDestroy
+    override fun close() = connection.close()
+}
