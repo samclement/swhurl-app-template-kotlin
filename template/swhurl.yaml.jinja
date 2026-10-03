@@ -6,8 +6,6 @@ kind: {{ kind }}
 {%- if kind == 'web' %}
 port: 8080
 healthPath: /healthz
-# A JVM with the OpenTelemetry agent starts in about 10 s, longer on a busy node: liveness waits for it.
-startupSeconds: 120
 {%- endif %}
 uid: 65532
 telemetry: otlp
