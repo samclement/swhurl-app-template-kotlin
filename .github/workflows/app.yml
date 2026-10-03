@@ -92,6 +92,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           field() { if [ -f swhurl.yaml ]; then sed -n "s/^$1: *//p" swhurl.yaml | head -1; fi; }
+          trap 'result=$?; if [ "$result" -ne 0 ]; then docker logs smoke || true; fi' EXIT
           kind=$(field kind); kind=${kind:-web}; database=$(field database)
           args=(--read-only --tmpfs /tmp)
           if [ "$database" = sqlite ]; then data_dir=$(mktemp -d); chmod 1777 "$data_dir"; args+=(-v "$data_dir:/data" -e DATABASE_PATH=/data/app.db); fi
@@ -115,7 +116,7 @@ jobs:
             docker stop smoke
             python3 - "$data_dir/app.db" "$data_dir/before.json" <<'PYSQL'
           import json, sqlite3, sys
-          with sqlite3.connect(sys.argv[1]) as db:
+          with sqlite3.connect(f'file:{sys.argv[1]}?mode=ro&immutable=1', uri=True) as db:
               migrations = db.execute('SELECT name FROM schema_migrations ORDER BY name').fetchall()
               events = db.execute('SELECT * FROM events ORDER BY rowid').fetchall()
               assert migrations, 'startup did not apply migrations'
@@ -139,7 +140,7 @@ jobs:
           import json, sqlite3, sys
           with open(sys.argv[2]) as snapshot:
               migrations, events = json.load(snapshot)
-          with sqlite3.connect(sys.argv[1]) as db:
+          with sqlite3.connect(f'file:{sys.argv[1]}?mode=ro&immutable=1', uri=True) as db:
               actual_migrations = [list(row) for row in db.execute('SELECT name FROM schema_migrations ORDER BY name')]
               actual_events = [list(row) for row in db.execute('SELECT * FROM events ORDER BY rowid')]
               assert actual_migrations == migrations, 'migrations changed or ran twice after restart'
