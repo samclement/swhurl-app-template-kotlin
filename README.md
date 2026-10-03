@@ -31,7 +31,7 @@ Shared by every Kotlin app and kept at the top level: [`.github/workflows/app.ym
 | --- | --- | --- |
 | Port (web) | `8080` | `application.properties` |
 | Health path (web) | `GET /healthz` returns `{"ok":true}` once the app has started (with a database, after it opened and migrated) | `HttpController.kt` |
-| Start-up | up to 120 s before liveness checks begin (`startupSeconds` in `swhurl.yaml`): a JVM with the agent starts in about 10 s, longer on a busy node | `swhurl.yaml` |
+| Start-up | a JVM with the agent starts in about 10 s, longer on a busy node; the platform gives every web app up to 120 s before liveness checks begin, and the smoke test waits as long | the platform |
 | Resources | 100m CPU, 192Mi memory, limit 384Mi (the heap is 70% of the limit) | `swhurl.yaml`, `Dockerfile` |
 | User | UID 65532, read-only root filesystem friendly (writes only to `/tmp`, and `/data` with a database) | distroless `nonroot` base image |
 | OpenTelemetry | the [Java agent](https://opentelemetry.io/docs/zero-code/java/agent/), loaded by the image; traces and JVM metrics over OTLP, logs not exported (stdout is collected) | `build.gradle.kts` (`copyAgent`), `Dockerfile` |
@@ -56,6 +56,6 @@ curl http://localhost:8080/healthz      # web
 
 ## Checks and dependency updates
 
-Every pull request and every push to `main` of an app runs the same checks from the shared `app.yml`: the image build runs `./gradlew check shadowJar copyAgent` once, then a smoke test that starts the image the way the cluster does (read-only root filesystem, `/tmp` and with a database `/data` writable), read from the app's `swhurl.yaml`: a web app must answer its health path and `/`, and every app must stay up. Only `main` pushes the image.
+Every pull request and every push to `main` of an app runs the same checks from the shared `app.yml`: the image build runs `./gradlew check shadowJar copyAgent` once, then a smoke test that starts the image the way the cluster does (read-only root filesystem, `/tmp` and with a database `/data` writable), read from the app's `swhurl.yaml`: a web app must answer its health path within 120 s (the platform's start-up allowance) and then `/`, and every app must stay up. Only `main` pushes the image.
 
 [Renovate](https://docs.renovatebot.com/) opens the update pull requests; each app's `renovate.json` extends this repository's [`renovate-preset.json`](renovate-preset.json): minor, patch and digest updates merge themselves once every check passes, majors wait for you, and Kotlin and Micronaut plugins are grouped. Keep tests for what the app does; an app without them should set `"automerge": false`.

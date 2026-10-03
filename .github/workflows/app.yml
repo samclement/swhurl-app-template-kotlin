@@ -97,12 +97,15 @@ jobs:
           if [ "$database" = sqlite ]; then args+=(--tmpfs /data:mode=1777 -e DATABASE_PATH=/data/app.db); fi
           if [ "$kind" = web ]; then args+=(-p 18080:8080); fi
           docker run -d --name smoke "${args[@]}" app:smoke
+          SECONDS=0
           if [ "$kind" = web ]; then
             path=$(field healthPath); path=${path:-/healthz}
-            for _ in $(seq 1 30); do
-              curl -fsS "http://127.0.0.1:18080$path" && break
+            # Up to 120 s: the start-up allowance the platform gives every web app (its startup probe).
+            for _ in $(seq 1 120); do
+              curl -fsS "http://127.0.0.1:18080$path" 2>/dev/null && break
               sleep 1
             done
+            echo "answered $path after ${SECONDS} s of the 120 s allowed"
             curl -fsS "http://127.0.0.1:18080$path" >/dev/null || { docker logs smoke; exit 1; }
             curl -fsS http://127.0.0.1:18080/ >/dev/null || { docker logs smoke; exit 1; }
           fi
