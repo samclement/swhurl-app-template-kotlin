@@ -9,7 +9,7 @@ An HTTP service: `HttpController.kt` answers on port 8080; the platform probes `
 {%- else -%}
 A background worker with no web address: `Worker.kt` runs `work()` every `WORK_INTERVAL_MS` (default a minute).
 {%- endif %}
-{%- if database == 'sqlite' %} It keeps its data in SQLite (`Database.kt`): on the platform the file is `/data/app.db` (`DATABASE_PATH`) on a volume that outlives the pod, backed up nightly; staging and production each have their own. Change the schema by adding `migrations/NNN_name.sql` (applied once each, in order, at startup); never edit one that has run.{% endif %}
+{%- if database == 'sqlite' %} It keeps its data in SQLite (`Database.kt`): on the platform the file is `/data/app.db` (`DATABASE_PATH`) on a volume that outlives the pod, backed up nightly; staging and production each have their own. Change the schema by adding `migrations/NNN_name.sql` (applied once each, in order, at startup); never edit one that has run. Image rollback does not reverse database migrations; review compatibility before promoting an older image.{% endif %}
 
 ## Local development
 
