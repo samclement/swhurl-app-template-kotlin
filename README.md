@@ -59,3 +59,9 @@ curl http://localhost:8080/healthz      # web
 Every pull request and every push to `main` of an app runs the same checks from the shared `app.yml`: the image build runs `./gradlew check shadowJar copyAgent` once, then a smoke test that starts the image the way the cluster does (read-only root filesystem, `/tmp` and with a database `/data` writable), read from the app's `swhurl.yaml`: a web app must answer its health path within 120 s (the platform's start-up allowance) and then `/`, and every app must stay up. SQLite images must apply migrations, write events, then preserve those rows and write again after a container restart using the same data directory. Only `main` pushes the image.
 
 [Renovate](https://docs.renovatebot.com/) opens the update pull requests; each app's `renovate.json` extends this repository's [`renovate-preset.json`](renovate-preset.json): minor, patch and digest updates merge themselves once every check passes, majors wait for you, and Kotlin and Micronaut plugins are grouped. Keep tests for what the app does; an app without them should set `"automerge": false`.
+
+## Template updates
+
+The platform catalogue pins a tested template commit. Releases have immutable version tags, which Copier records in `.copier-answers.yml` even when copying by commit. Renovate's Copier manager proposes complete template updates from these tags, using the saved answers and preserving independent app edits. Copier PRs always require manual review; resolve any conflict markers before merging. The Container workflow runs app checks on the PR and publishes only after a main merge.
+
+For existing apps with a commit hash in their answers file, bootstrap to a released tag with `uvx copier@9.18.2 update --skip-answered --defaults --vcs-ref v0.1.0` on a clean branch and review the diff. Commit it and open a PR; do not edit `_commit` by hand. No template credential or scheduled updater is needed.

@@ -1,7 +1,7 @@
 name: Container
 
 # Checks and publishes this app with the workflow shared by every app from the swhurl Kotlin template
-# (its app.yml). Keep this file as it is: fixes to the shared workflow arrive without editing it.
+# (its app.yml). Renovate proposes version updates; PRs check the app before main publishes an image.
 
 on:
   push:
@@ -15,4 +15,4 @@ permissions:
 
 jobs:
   app:
-    uses: samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@main
+    uses: samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v0.1.0

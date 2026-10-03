@@ -1,14 +1,20 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "description": "Renovate rules shared by every app built from the swhurl Kotlin template. Apps extend this file (github>samclement/swhurl-app-template-kotlin:renovate-preset), so a change here reaches all of them on Renovate's next run.",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "dependencyDashboard": true,
   "customManagers": [
     {
       "description": "Micronaut's platform version lives in gradle.properties (micronautVersion), where Gradle's own manager does not look; gradle.properties.jinja is the template's copy.",
       "customType": "regex",
-      "managerFilePatterns": ["/(^|/)gradle\\.properties(\\.jinja)?$/"],
-      "matchStrings": ["micronautVersion=(?<currentValue>\\S+)"],
+      "managerFilePatterns": [
+        "/(^|/)gradle\\.properties(\\.jinja)?$/"
+      ],
+      "matchStrings": [
+        "micronautVersion=(?<currentValue>\\S+)"
+      ],
       "depNameTemplate": "io.micronaut.platform:micronaut-platform",
       "datasourceTemplate": "maven"
     }
@@ -16,22 +22,41 @@
   "packageRules": [
     {
       "description": "Kotlin and its compiler plugins release together; update them in one PR.",
-      "matchPackageNames": ["/^org\\.jetbrains\\.kotlin/", "com.google.devtools.ksp"],
+      "matchPackageNames": [
+        "/^org\\.jetbrains\\.kotlin/",
+        "com.google.devtools.ksp"
+      ],
       "groupName": "Kotlin"
     },
     {
       "description": "Micronaut's Gradle plugins and its platform version (micronautVersion) release together.",
-      "matchPackageNames": ["/^io\\.micronaut\\./"],
+      "matchPackageNames": [
+        "/^io\\.micronaut\\./"
+      ],
       "groupName": "Micronaut"
     },
     {
       "description": "Minor, patch and digest updates merge themselves once every check passes (compile, tests, image build, smoke test). Each merge deploys to staging; production changes only through a promote. Apps without tests set automerge to false in their renovate.json.",
-      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
       "automerge": true
     },
     {
       "description": "Major updates wait for a person.",
-      "matchUpdateTypes": ["major"],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "automerge": false
+    },
+    {
+      "description": "Copier updates can touch app edits; always review their complete diff and conflicts.",
+      "matchManagers": [
+        "copier"
+      ],
       "automerge": false
     }
   ]
