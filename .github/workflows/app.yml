@@ -2,8 +2,7 @@ name: App
 
 # The checks and image build every swhurl app runs, shared from the template: each app's
 # .github/workflows/container.yml calls this file at
-# samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@main, so a fix here reaches
-# every app on its next run (like renovate-preset.json). The image build runs Gradle checks and packages
+# samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v…; Renovate updates each released pin (like renovate-preset.json). The image build runs Gradle checks and packages
 # the app in one invocation, then smoke-tests it (it starts, answers /healthz and keeps running).
 # Pushes to main then push the image to GHCR tagged <run number>-<short sha> (for example 42-a1b2c3d); the platform's image
 # automation deploys the highest run number to staging, and the job summary prints image@digest.

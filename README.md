@@ -10,7 +10,7 @@ In the platform console, **New app** → stack **kotlin**, or from a checkout of
 make app-repo NAME=<app> STACK=kotlin ANSWERS="kind=web database=sqlite"
 ```
 
-Either creates the public repository `samclement/<app>`, waits for its first image and adds it to staging ([start a new app](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#start-a-new-app)). From then on every push to `main` reaches staging on its own; production changes through **Promote to prod**.
+Either creates the public repository `samclement/<app>`, waits for its first image and adds it to staging ([start a new app](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#start-a-new-app)). From then on every push to `main` reaches staging on its own; production changes through **Promote to production**.
 
 ## How this repository is laid out
 
