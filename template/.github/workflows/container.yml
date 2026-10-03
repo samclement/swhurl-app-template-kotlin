@@ -15,4 +15,4 @@ permissions:
 
 jobs:
   app:
-    uses: samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v0.1.2
+    uses: samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v0.1.3
