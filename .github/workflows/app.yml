@@ -94,7 +94,7 @@ jobs:
           field() { if [ -f swhurl.yaml ]; then sed -n "s/^$1: *//p" swhurl.yaml | head -1; fi; }
           kind=$(field kind); kind=${kind:-web}; database=$(field database)
           args=(--read-only --tmpfs /tmp)
-          if [ "$database" = sqlite ]; then args+=(--tmpfs /data:mode=1777 -e DATABASE_PATH=/data/app.db); fi
+          if [ "$database" = sqlite ]; then data_dir=$(mktemp -d); chmod 1777 "$data_dir"; args+=(-v "$data_dir:/data" -e DATABASE_PATH=/data/app.db); fi
           if [ "$kind" = web ]; then args+=(-p 18080:8080); fi
           docker run -d --name smoke "${args[@]}" app:smoke
           SECONDS=0
@@ -111,6 +111,43 @@ jobs:
           fi
           sleep 10
           [ "$(docker inspect -f '{{.State.Running}}' smoke)" = true ] || { docker logs smoke; exit 1; }
+          if [ "$database" = sqlite ]; then
+            docker stop smoke
+            python3 - "$data_dir/app.db" "$data_dir/before.json" <<'PYSQL'
+          import json, sqlite3, sys
+          with sqlite3.connect(sys.argv[1]) as db:
+              migrations = db.execute('SELECT name FROM schema_migrations ORDER BY name').fetchall()
+              events = db.execute('SELECT * FROM events ORDER BY rowid').fetchall()
+              assert migrations, 'startup did not apply migrations'
+              assert events, 'application did not write data'
+              with open(sys.argv[2], 'w') as snapshot:
+                  json.dump([migrations, events], snapshot)
+          PYSQL
+            docker start smoke
+            if [ "$kind" = web ]; then
+              for _ in $(seq 1 120); do
+                curl -fsS "http://127.0.0.1:18080$path" >/dev/null 2>&1 && break
+                sleep 1
+              done
+              curl -fsS "http://127.0.0.1:18080$path" >/dev/null
+              curl -fsS http://127.0.0.1:18080/ >/dev/null
+            fi
+            sleep 10
+            [ "$(docker inspect -f '{{.State.Running}}' smoke)" = true ] || { docker logs smoke; exit 1; }
+            docker stop smoke
+            python3 - "$data_dir/app.db" "$data_dir/before.json" <<'PYSQL'
+          import json, sqlite3, sys
+          with open(sys.argv[2]) as snapshot:
+              migrations, events = json.load(snapshot)
+          with sqlite3.connect(sys.argv[1]) as db:
+              actual_migrations = [list(row) for row in db.execute('SELECT name FROM schema_migrations ORDER BY name')]
+              actual_events = [list(row) for row in db.execute('SELECT * FROM events ORDER BY rowid')]
+              assert actual_migrations == migrations, 'migrations changed or ran twice after restart'
+              assert actual_events[:len(events)] == events, 'data did not survive restart'
+              assert len(actual_events) > len(events), 'application cannot write after restart'
+          print('SQLite migrations, application writes and restart persistence passed')
+          PYSQL
+          fi
           echo "smoke test passed ($kind${database:+, $database})"
 
       - name: Login to GHCR
