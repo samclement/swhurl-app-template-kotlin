@@ -17,6 +17,7 @@ import java.security.Signature
 import java.security.spec.RSAPublicKeySpec
 import java.time.Duration
 import java.util.Base64
+import org.slf4j.LoggerFactory
 
 // What the swhurl platform gives this app: who is calling it, and how to call the apps it declared.
 // https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#calling-another-app
@@ -32,6 +33,7 @@ class Unauthorized(message: String) : RuntimeException(message)
 class Platform(private val environment: Environment, private val json: JsonMapper) {
     private val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build()
     private val decoder = Base64.getUrlDecoder()
+    private val log = LoggerFactory.getLogger(Platform::class.java)
 
     // The platform sets these as environment variables (SWHURL_APP ...); tests set the properties.
     fun setting(variable: String): String? {
@@ -142,5 +144,40 @@ class Platform(private val environment: Environment, private val json: JsonMappe
         val token = Path.of(setting("SWHURL_TOKENS_DIR") ?: "/var/run/swhurl/tokens", name, "token")
         if (Files.exists(token)) request.header("Authorization", "Bearer ${Files.readString(token).trim()}")
         return client.send(request.GET().build(), HttpResponse.BodyHandlers.ofString())
+    }
+
+    /**
+     * Send a message to the notification channel of the team that owns this app
+     * (https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#notifications). It arrives
+     * titled "<app>/<env>: <title>": the platform takes who sent it from this app's token. `priority`
+     * is "normal" or "high"; `key` makes a repeat harmless (the same key is delivered once); `click`
+     * is an https link opened from the message.
+     *
+     * Returns whether the platform accepted it, and never throws: a notification must not break the
+     * work that sent it. It is not accepted when the app has sent 30 in the last hour, and outside the
+     * platform (SWHURL_NOTIFY_URL is not set) nothing is sent. A team without a channel accepts and
+     * delivers nothing.
+     */
+    fun notify(title: String, message: String = "", priority: String = "normal", click: String = "", key: String = ""): Boolean {
+        val base = setting("SWHURL_NOTIFY_URL") ?: return false
+        try {
+            val fields = mapOf("title" to title, "message" to message, "priority" to priority, "click" to click, "key" to key)
+                .filterValues { it.isNotEmpty() }
+            val request = HttpRequest.newBuilder(URI.create(base.trimEnd('/') + "/v1/notify"))
+                .timeout(Duration.ofSeconds(5))
+                .header("Content-Type", "application/json")
+            // The platform replaces the token file every few minutes, so read it for each call.
+            val token = Path.of(setting("SWHURL_TOKENS_DIR") ?: "/var/run/swhurl/tokens", "notify", "token")
+            if (Files.exists(token)) request.header("Authorization", "Bearer ${Files.readString(token).trim()}")
+            val reply = client.send(
+                request.POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(fields))).build(),
+                HttpResponse.BodyHandlers.ofString(),
+            )
+            if (reply.statusCode() == 202) return true
+            log.warn("notification not sent: the notify service answered ${reply.statusCode()}: ${reply.body().take(200)}")
+        } catch (problem: Exception) {
+            log.warn("notification not sent: ${problem.message ?: problem.javaClass.simpleName}")
+        }
+        return false
     }
 }
