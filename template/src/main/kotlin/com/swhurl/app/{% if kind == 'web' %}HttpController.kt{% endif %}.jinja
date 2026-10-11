@@ -51,7 +51,7 @@ class CallerFilter(private val platform: Platform) {
             if (caller.id != null) Span.current().setAttribute("caller.id", caller.id)
             null
         } catch (refused: Unauthorized) {
-            log.warn("request refused: {}", refused.message)
+            log.warn("request refused: ${refused.message}")
             HttpResponse.status<Refusal>(HttpStatus.UNAUTHORIZED).body(Refusal(refused.message ?: "unauthorized"))
         }
     }
@@ -80,7 +80,7 @@ class HttpController(
         val caller = caller(request)
         MDC.putCloseable("caller.type", caller.type).use {
             MDC.putCloseable("caller.id", caller.id ?: "").use {
-                log.info("request handled: {} {} {}", request.methodName, request.path, status)
+                log.info("request handled: ${request.methodName} ${request.path} $status")
             }
         }
     }
