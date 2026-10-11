@@ -1,22 +1,74 @@
 package com.swhurl.app
 
+import io.micronaut.http.HttpRequest
+import io.micronaut.http.HttpStatus
 import io.micronaut.http.client.HttpClient
 import io.micronaut.http.client.annotation.Client
+import io.micronaut.http.client.exceptions.HttpClientResponseException
 {%- if database == 'sqlite' %}
 import io.micronaut.context.annotation.Property
 {%- endif %}
 import io.micronaut.test.extensions.junit5.annotation.MicronautTest
+import io.micronaut.test.support.TestPropertyProvider
 import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
+import java.security.KeyPairGenerator
+import java.security.PrivateKey
+import java.security.Signature
+import java.security.interfaces.RSAPublicKey
+import java.util.Base64
 
-// Starts the app on a random port and calls it as the platform and a browser would.
+private const val ISSUER = "https://kubernetes.default.svc.cluster.local"
+
+// Starts the app on a random port and calls it as the platform, a browser and another app would.
+// Tokens are signed with a key made for the test, as the cluster signs real ones.
 @MicronautTest
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 {%- if database == 'sqlite' %}
 @Property(name = "database.path", value = "build/test-http.db")
 {%- endif %}
-class HttpTest {
+class HttpTest : TestPropertyProvider {
+    private val keys = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+    private val encoder = Base64.getUrlEncoder().withoutPadding()
+
+    // What the platform sets as SWHURL_* environment variables.
+    override fun getProperties(): Map<String, String> {
+        val public = keys.public as RSAPublicKey
+        val n = encoder.encodeToString(public.modulus.toByteArray())
+        val e = encoder.encodeToString(public.publicExponent.toByteArray())
+        return mapOf(
+            "swhurl.app" to "orders",
+            "swhurl.env" to "staging",
+            "swhurl.auth.issuer" to ISSUER,
+            "swhurl.auth.keys" to """{"keys":[{"kty":"RSA","alg":"RS256","kid":"k1","n":"$n","e":"$e"}]}""",
+            "swhurl.allowed.callers" to "reports,billing",
+        )
+    }
+
+    private fun token(
+        audience: String = "orders",
+        subject: String = "system:serviceaccount:reports-staging:reports",
+        expires: Long = System.currentTimeMillis() / 1000 + 600,
+        key: PrivateKey = keys.private,
+    ): String {
+        val head = encoder.encodeToString("""{"alg":"RS256","kid":"k1"}""".toByteArray())
+        val claims = """{"iss":"$ISSUER","aud":["$audience"],"exp":$expires,"sub":"$subject"}"""
+        val body = "$head.${encoder.encodeToString(claims.toByteArray())}"
+        val signature = Signature.getInstance("SHA256withRSA").run {
+            initSign(key)
+            update(body.toByteArray())
+            sign()
+        }
+        return "$body.${encoder.encodeToString(signature)}"
+    }
+
+    private fun root(bearer: String): String =
+        client.toBlocking().retrieve(HttpRequest.GET<Any>("/").header("Authorization", "Bearer $bearer"))
+
     @Inject
     @field:Client("/")
     lateinit var client: HttpClient
@@ -27,7 +79,43 @@ class HttpTest {
     }
 
     @Test
-    fun `root says hello`() {
-        assertTrue(client.toBlocking().retrieve("/").contains("hello from"))
+    fun `root says hello to anyone and to a signed-in person`() {
+        val anonymous = client.toBlocking().retrieve("/")
+        assertTrue(anonymous.contains("hello from"))
+        assertTrue(anonymous.contains(""""type":"anonymous""""), anonymous)
+        val person = client.toBlocking().retrieve(HttpRequest.GET<Any>("/").header("X-Auth-Request-Email", "sam@example.com"))
+        assertTrue(person.contains(""""type":"user"""") && person.contains("sam@example.com"), person)
+    }
+
+    @Test
+    fun `an allowed app with a token for this app is identified`() {
+        val reply = root(token())
+        assertTrue(reply.contains(""""type":"app"""") && reply.contains(""""id":"reports""""), reply)
+    }
+
+    @Test
+    fun `every other token is refused with 401`() {
+        val other = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair().private
+        val refused = mapOf(
+            "another audience" to token(audience = "inventory"),
+            "expired" to token(expires = System.currentTimeMillis() / 1000 - 1),
+            "an app that is not allowed" to token(subject = "system:serviceaccount:stranger-staging:stranger"),
+            "another environment" to token(subject = "system:serviceaccount:reports-prod:reports"),
+            "a forged signature" to token(key = other),
+            "garbage" to "not-a-token",
+        )
+        for ((name, bearer) in refused) {
+            val error = assertThrows(HttpClientResponseException::class.java, { root(bearer) }, name)
+            assertEquals(HttpStatus.UNAUTHORIZED, error.status, name)
+        }
+        // The health path is the platform's probe: it is never asked for a token.
+        assertEquals("""{"ok":true}""", client.toBlocking().retrieve(HttpRequest.GET<Any>("/healthz").header("Authorization", "Bearer x")))
+    }
+
+    @Test
+    fun `calling an app that was not declared says how to declare it`() {
+        val error = assertThrows(HttpClientResponseException::class.java) { client.toBlocking().retrieve("/call/inventory") }
+        assertEquals(HttpStatus.BAD_GATEWAY, error.status)
+        assertTrue(error.response.getBody(String::class.java).orElse("").contains("SWHURL_SERVICE_INVENTORY_URL is not set"))
     }
 }

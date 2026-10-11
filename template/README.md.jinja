@@ -11,6 +11,16 @@ A background worker with no web address: `Worker.kt` runs `work()` every `WORK_I
 {%- endif %}
 {%- if database == 'sqlite' %} It keeps its data in SQLite (`Database.kt`): on the platform the file is `/data/app.db` (`DATABASE_PATH`) on a volume that outlives the pod, backed up nightly; staging and production each have their own. Change the schema by adding `migrations/NNN_name.sql` (applied once each, in order, at startup); never edit one that has run. Image rollback does not reverse database migrations; review compatibility before promoting an older image.{% endif %}
 
+## Callers and calling other apps
+
+`Platform.kt` holds what the platform gives the app ([calling another app](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#calling-another-app)):
+{% if kind == 'web' %}
+- **Who is calling.** `CallerFilter` (in `HttpController.kt`) runs before every route except `/healthz` and puts a `Caller` on the request: type `app` with the app's name (it sent a token the platform issued for this app alone), `user` with a signed-in person's email, or `anonymous`. A bad token is answered 401. Every request's log line and span carry `caller.type` and `caller.id`. For a route only apps may use, call `platform.requireApp(caller)`.
+{%- endif %}
+- **Calling another app.** Add `calls: [orders]` to `swhurl.yaml` before the app is created (afterwards: `make app-calls` on the platform, or the app page's **Calls** form). Then `platform.call("orders", "/path")` reaches the same environment's `orders` with this app's token for it; the callee's spans join the same trace.{% if kind == 'web' %} `GET /call/orders` in `HttpController.kt` is an example to replace.{% endif %}
+
+Locally there are no platform keys or tokens: {% if kind == 'web' %}requests without a token work as before and a request with one is refused; {% endif %}to call another app, set `SWHURL_SERVICE_<NAME>_URL` to a local stub.
+
 ## Local development
 
 Needs a JDK 25 (Gradle downloads everything else):

@@ -33,6 +33,8 @@ dependencies {
     runtimeOnly("tools.jackson.module:jackson-module-kotlin")
     if (kind == "web") {
         ksp("io.micronaut:micronaut-http-validation")
+        // Only to name the caller on the current span (HttpController.kt); the agent supplies the implementation.
+        implementation("io.opentelemetry:opentelemetry-api:1.44.0")
         testImplementation("io.micronaut:micronaut-http-client")
     }
     if (database == "sqlite") {
