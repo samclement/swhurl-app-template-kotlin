@@ -32,7 +32,7 @@ dependencies {
     // To name the caller on a span and carry the trace through events; the agent supplies the implementation.
     implementation("io.opentelemetry:opentelemetry-api:1.44.0")
     // Events on the platform's NATS (Events.kt).
-    implementation("io.nats:jnats:2.20.5")
+    implementation("io.nats:jnats:2.26.4")
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("tools.jackson.module:jackson-module-kotlin")
     if (kind == "web") {
