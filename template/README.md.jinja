@@ -19,6 +19,20 @@ A background worker with no web address: `Worker.kt` runs `work()` every `WORK_I
 {%- endif %}
 - **Calling another app.** Add `calls: [orders]` to `swhurl.yaml` before the app is created (afterwards: `make app-calls` on the platform, or the app page's **Calls** form). Then `platform.call("orders", "/path")` reaches the same environment's `orders` with this app's token for it; the callee's spans join the same trace.{% if kind == 'web' %} `GET /call/orders` in `HttpController.kt` is an example to replace.{% endif %}
 
+## Events
+
+`Events.kt` publishes and receives events on the platform's NATS ([events](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#events)). Declare them in `swhurl.yaml` before the app is created (afterwards: `make app-events` on the platform):
+
+```yaml
+events:
+  publish: [created]               # other apps see {{ app_name }}.created
+  subscribe: [orders.created]      # <app>.<event>
+```
+
+Then `events.publish("created", mapOf("id" to 42))` and `events.subscribe("orders.created") { event -> ... }`. An event is a CloudEvents envelope (`event.data` is what was published); a handler runs inside the publisher's trace, and if it throws the event comes back, five tries in all. `subscribe` keeps trying until it is receiving, since a new app can start before NATS knows it. {% if kind == 'web' %}`HttpController.kt` publishes the first declared event on every request{% else %}`Worker.kt` logs every event it subscribes to{% endif %}: an example to replace. Locally there is no NATS: `publish` returns `null` and `subscribe` never calls back.
+
+## Without the platform
+
 Locally there are no platform keys or tokens: {% if kind == 'web' %}requests without a token work as before and a request with one is refused; {% endif %}to call another app, set `SWHURL_SERVICE_<NAME>_URL` to a local stub.
 
 ## Local development

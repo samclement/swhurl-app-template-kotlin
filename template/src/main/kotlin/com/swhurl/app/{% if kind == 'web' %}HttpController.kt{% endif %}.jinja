@@ -61,6 +61,7 @@ class CallerFilter(private val platform: Platform) {
 class HttpController(
     @Value("\${otel.service.name:swhurl-app}") private val serviceName: String,
     private val platform: Platform,
+    private val events: Events,
 {%- if database == 'sqlite' %}
     private val database: Database,
 {%- endif %}
@@ -106,6 +107,15 @@ class HttpController(
 {%- if database == 'sqlite' %}
         val visits = database.recordVisit("/")
 {%- endif %}
+        // An example of publishing: the first event this app declares (events.publish in swhurl.yaml)
+        // goes out on every request. Off the platform, or with nothing declared, nothing happens.
+        events.declaredPublishes().firstOrNull()?.let { declared ->
+            try {
+                events.publish(declared, mapOf("path" to "/", "caller" to caller(request).type))
+            } catch (problem: Exception) {
+                log.error("event not published: $declared: ${problem.message}")
+            }
+        }
         logged(request, 200)
         return Hello("hello from $serviceName", serviceName, caller(request){% if database == 'sqlite' %}, visits{% endif %})
     }

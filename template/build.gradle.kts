@@ -29,12 +29,14 @@ dependencies {
     // kotlin-stdlib comes with the Kotlin plugin, and kotlin("reflect") takes the plugin's version, so both
     // always match the compiler that Renovate updates in the plugins block.
     implementation(kotlin("reflect"))
+    // To name the caller on a span and carry the trace through events; the agent supplies the implementation.
+    implementation("io.opentelemetry:opentelemetry-api:1.44.0")
+    // Events on the platform's NATS (Events.kt).
+    implementation("io.nats:jnats:2.20.5")
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("tools.jackson.module:jackson-module-kotlin")
     if (kind == "web") {
         ksp("io.micronaut:micronaut-http-validation")
-        // Only to name the caller on the current span (HttpController.kt); the agent supplies the implementation.
-        implementation("io.opentelemetry:opentelemetry-api:1.44.0")
         testImplementation("io.micronaut:micronaut-http-client")
     }
     if (database == "sqlite") {

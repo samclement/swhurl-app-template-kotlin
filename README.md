@@ -41,6 +41,8 @@ Shared by every Kotlin app and kept at the top level: [`.github/workflows/app.ym
 
 Every app also gets `Platform.kt`: it tells a web app whether a request comes from another app (a platform-issued token for this app alone), a signed-in person or nobody, and `platform.call("name", "/path")` calls an app declared under `calls:` in `swhurl.yaml` with this app's token for it ([calling another app](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#calling-another-app)). It checks tokens with the JDK's own `java.security`; the only added dependency is the OpenTelemetry API, to name the caller on the span.
 
+`Events.kt` does the same for [events](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#events): `events.publish("created", data)` and `events.subscribe("orders.created") { ... }` for the events declared under `events:` in `swhurl.yaml`, over NATS JetStream with the app's own key, as CloudEvents carrying the trace. It adds the `jnats` client.
+
 What the platform injects: `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_SERVICE_NAME` (the app name), and `DATABASE_PATH` with a database. Sign-in happens before requests reach the app; it can read the user from `X-Auth-Request-Email`.
 
 The JVM runs with `-XX:TieredStopAtLevel=1` (only the fast JIT tier: start-up in a fraction of the time, a little less peak speed) and the serial GC. Remove the flag in the `Dockerfile` for a CPU-heavy app.

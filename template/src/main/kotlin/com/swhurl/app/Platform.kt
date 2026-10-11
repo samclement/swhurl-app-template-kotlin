@@ -34,7 +34,7 @@ class Platform(private val environment: Environment, private val json: JsonMappe
     private val decoder = Base64.getUrlDecoder()
 
     // The platform sets these as environment variables (SWHURL_APP ...); tests set the properties.
-    private fun setting(variable: String): String? {
+    fun setting(variable: String): String? {
         val property = variable.lowercase().replace('_', '.')
         val value = System.getenv(variable) ?: environment.getProperty(property, String::class.java).orElse(null)
         return value?.takeIf { it.isNotBlank() }
