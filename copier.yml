@@ -33,3 +33,19 @@ database:
     none: none
     sqlite: sqlite
   default: none
+
+api:
+  type: str
+  help: "openapi: describes the app's HTTP API in openapi.yaml, generated from its controllers, so other apps can find and call it (web only)"
+  choices:
+    none: none
+    openapi: openapi
+  default: none
+
+events:
+  type: str
+  help: "asyncapi: describes the events the app publishes in asyncapi.yaml, so other apps can find and subscribe to them"
+  choices:
+    none: none
+    asyncapi: asyncapi
+  default: none

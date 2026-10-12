@@ -18,3 +18,18 @@ resources:
   cpu: 100m
   memory: 192Mi
   memoryLimit: 384Mi
+{%- if kind == 'web' and api == 'openapi' or events == 'asyncapi' %}
+# What this app offers other apps: its API description (served, and kept in the repository) and its events.
+provides:
+{%- if kind == 'web' and api == 'openapi' %}
+  api: /openapi.yaml
+  apiFile: src/main/resources/openapi.yaml
+{%- endif %}
+{%- if events == 'asyncapi' %}
+  eventsFile: src/main/resources/asyncapi.yaml
+{%- endif %}
+{%- endif %}
+{%- if events == 'asyncapi' %}
+events:
+  publish: [{{ 'visited' if kind == 'web' else 'worked' }}]
+{%- endif %}

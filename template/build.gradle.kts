@@ -13,6 +13,7 @@ group = "com.swhurl.app"
 // Renovate can read and update every version below.
 val kind = providers.gradleProperty("swhurl.kind").get()
 val database = providers.gradleProperty("swhurl.database").get()
+val api = providers.gradleProperty("swhurl.api").get()
 
 repositories {
     mavenCentral()
@@ -33,11 +34,20 @@ dependencies {
     implementation("io.opentelemetry:opentelemetry-api:1.67.0")
     // Events on the platform's NATS (Events.kt).
     implementation("io.nats:jnats:2.26.4")
+    // Holds each published event to its schema in asyncapi.yaml, when the app has one (Events.kt).
+    // Versions come from the Micronaut platform, like the Jackson they share with it.
+    implementation("com.networknt:json-schema-validator")
+    implementation("tools.jackson.dataformat:jackson-dataformat-yaml")
     runtimeOnly("ch.qos.logback:logback-classic")
     runtimeOnly("tools.jackson.module:jackson-module-kotlin")
     if (kind == "web") {
         ksp("io.micronaut:micronaut-http-validation")
         testImplementation("io.micronaut:micronaut-http-client")
+    }
+    if (api == "openapi") {
+        // Writes the API description from the controllers at build time (META-INF/swagger in the jar).
+        ksp("io.micronaut.openapi:micronaut-openapi")
+        compileOnly("io.micronaut.openapi:micronaut-openapi-annotations")
     }
     if (database == "sqlite") {
         implementation("org.xerial:sqlite-jdbc:3.53.4.0")
@@ -61,6 +71,20 @@ micronaut {
     processing {
         incremental(true)
         annotations("com.swhurl.app.*")
+    }
+}
+
+if (api == "openapi") {
+    // `./gradlew openapi`: copies the description generated from the controllers over the committed
+    // src/main/resources/openapi.yaml, which the platform reads and the app serves. OpenApiTest fails
+    // while the two disagree, so run this after changing a route and commit the result.
+    tasks.register("openapi") {
+        dependsOn("kspKotlin")
+        val generated = layout.buildDirectory.dir("generated/ksp/main/resources/META-INF/swagger")
+        val committed = layout.projectDirectory.file("src/main/resources/openapi.yaml")
+        doLast {
+            generated.get().asFile.listFiles { file -> file.extension == "yml" }!!.single().copyTo(committed.asFile, overwrite = true)
+        }
     }
 }
 
