@@ -1,5 +1,9 @@
 package com.swhurl.app
 
+import com.networknt.schema.InputFormat
+import com.networknt.schema.Schema
+import com.networknt.schema.SchemaRegistry
+import com.networknt.schema.SpecificationVersion
 import io.micronaut.json.JsonMapper
 import io.micronaut.json.tree.JsonNode
 import io.nats.client.AuthHandler
@@ -23,6 +27,8 @@ import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.concurrent.thread
 import org.slf4j.LoggerFactory
+import tools.jackson.databind.node.JsonNodeFactory
+import tools.jackson.dataformat.yaml.YAMLMapper
 
 // Events between apps on the swhurl platform's NATS JetStream.
 // https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#events
@@ -33,12 +39,20 @@ import org.slf4j.LoggerFactory
 //   events.publish("created", mapOf("id" to 42))            // other apps see <this app>.created
 //   events.subscribe("orders.created") { event -> ... }     // throw to get it again
 //
+// An app that describes its events in src/main/resources/asyncapi.yaml (the template's "events"
+// feature) may publish only those, each with a payload that fits its schema: publish() throws
+// EventInvalid otherwise, on the platform and off it. The file is what other apps read to find and
+// subscribe to them.
+//
 // An event travels as a CloudEvents JSON envelope with the trace context in its headers, so the
 // subscriber's work joins the publisher's trace. Off the platform (local development, tests) there
 // is no SWHURL_EVENTS_URL: publish() does nothing and returns null, subscribe() never calls back.
 
 /** A received event: `data` is what the publisher sent. */
 data class Event(val id: String, val source: String, val type: String, val time: String, val data: JsonNode?)
+
+/** An event that asyncapi.yaml does not describe, or a payload that does not fit its schema. */
+class EventInvalid(message: String) : RuntimeException(message)
 
 @Singleton
 class Events(private val platform: Platform, private val json: JsonMapper) {
@@ -79,6 +93,56 @@ class Events(private val platform: Platform, private val json: JsonMapper) {
             ),
         )
 
+    /**
+     * The events asyncapi.yaml says this app sends, each with a check for its payload (null: any
+     * payload); null when the app has no such file, and nothing is checked. A channel's address is
+     * the event's name; with an `operations` section, only channels an operation sends to count.
+     */
+    val described: Map<String, Schema?>? by lazy {
+        val file = platform.setting("SWHURL_EVENTS_FILE") ?: "asyncapi.yaml"
+        val source = Events::class.java.classLoader.getResourceAsStream(file) ?: return@lazy null
+        val doc = source.use { YAMLMapper().readTree(it) }
+        fun text(node: tools.jackson.databind.JsonNode?) = if (node != null && node.isString) node.stringValue() else ""
+        // Write out local references ("#/components/..."), so a schema stands on its own.
+        fun settled(node: tools.jackson.databind.JsonNode, depth: Int = 0): tools.jackson.databind.JsonNode {
+            require(depth < 32) { "asyncapi.yaml: references nest too deeply (a cycle?)" }
+            if (node.isObject && node.has("\$ref")) return settled(doc.at(text(node.get("\$ref")).removePrefix("#")), depth + 1)
+            if (node.isObject) {
+                val copy = JsonNodeFactory.instance.objectNode()
+                node.properties().forEach { (key, value) -> copy.set(key, settled(value, depth + 1)) }
+                return copy
+            }
+            if (node.isArray) {
+                val copy = JsonNodeFactory.instance.arrayNode()
+                node.forEach { copy.add(settled(it, depth + 1)) }
+                return copy
+            }
+            return node
+        }
+        val operations = doc.path("operations").toList()
+        val sends = operations.filter { text(it.get("action")) == "send" }.map { text(it.path("channel").get("\$ref")) }.toSet()
+        val schemas = SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_7)
+        val found = LinkedHashMap<String, Schema?>()
+        doc.path("channels").properties().forEach { (key, channel) ->
+            if (operations.isNotEmpty() && "#/channels/$key" !in sends) return@forEach
+            val message = channel.path("messages").firstOrNull()?.let { settled(it) }
+            found[text(channel.get("address")).ifEmpty { key }] = message?.get("payload")?.let { schemas.getSchema(it) }
+        }
+        found
+    }
+
+    private fun checkDescribed(event: String, data: Map<String, Any?>) {
+        val events = described ?: return
+        if (event !in events) {
+            throw EventInvalid("\"$event\" is not an event asyncapi.yaml describes (${events.keys.joinToString().ifEmpty { "none" }})")
+        }
+        // As it will travel: the JSON the subscriber receives.
+        val problems = events[event]?.validate(json.writeValueAsString(data), InputFormat.JSON) ?: return
+        if (problems.isNotEmpty()) {
+            throw EventInvalid("\"$event\" does not fit its schema in asyncapi.yaml: ${problems.joinToString("; ") { it.message }}")
+        }
+    }
+
     @Synchronized
     private fun connected(): Connection {
         connection?.let { return it }
@@ -99,8 +163,9 @@ class Events(private val platform: Platform, private val json: JsonMapper) {
         return Nats.connect(options).also { connection = it }
     }
 
-    /** Publish one of this app's declared events. Returns its id once NATS has stored it; null off the platform. */
+    /** Publish one of this app's events. Returns its id once NATS has stored it; null off the platform. */
     fun publish(event: String, data: Map<String, Any?>): String? {
+        checkDescribed(event, data)
         if (!enabled()) return null
         val subject = subjectOf(app, event)
         val span = GlobalOpenTelemetry.getTracer("swhurl-events").spanBuilder("publish $app.$event")

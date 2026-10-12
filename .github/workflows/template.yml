@@ -1,6 +1,6 @@
 name: Template
 
-# Renders the template (as `make app-repo` does) once per combination of its questions and runs the
+# Renders the template (as `make app-repo` does) for a set of answers to its questions and runs the
 # shared app checks on each result: type-check, tests, image build and smoke test. Nothing is published.
 
 on:
@@ -19,12 +19,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Every combination of the template's questions (copier.yml); add a line when a question is added.
+        # The defaults, each other choice of the template's questions (copier.yml) on its own, and all of
+        # them together for each kind: this grows with the number of choices, not with their product.
+        # The platform's make check-templates still renders every combination (it builds nothing).
         answers:
-          - kind=web database=none
-          - kind=web database=sqlite
-          - kind=worker database=none
-          - kind=worker database=sqlite
+          - kind=web database=none api=none events=none
+          - kind=worker database=none api=none events=none
+          - kind=web database=sqlite api=none events=none
+          - kind=web database=none api=openapi events=none
+          - kind=web database=none api=none events=asyncapi
+          - kind=web database=sqlite api=openapi events=asyncapi
+          - kind=worker database=sqlite api=none events=asyncapi
     uses: ./.github/workflows/app.yml
     with:
       template: true

@@ -78,6 +78,14 @@ class HttpTest : TestPropertyProvider {
         assertEquals("""{"ok":true}""", client.toBlocking().retrieve("/healthz"))
     }
 
+{%- if api == 'openapi' %}
+    @Test
+    fun `the API description is served`() {
+        val served = client.toBlocking().retrieve("/openapi.yaml")
+        assertTrue(served.startsWith("openapi: 3.") && served.contains("\n  /:\n"), served)
+    }
+
+{% endif %}
     @Test
     fun `root says hello to anyone and to a signed-in person`() {
         val anonymous = client.toBlocking().retrieve("/")

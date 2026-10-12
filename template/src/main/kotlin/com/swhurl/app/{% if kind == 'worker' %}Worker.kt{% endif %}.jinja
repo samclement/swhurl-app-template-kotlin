@@ -35,6 +35,11 @@ class Worker(
 {%- if database == 'sqlite' %}
             database.recordRun(serviceName)
 {%- endif %}
+{%- if events == 'asyncapi' %}
+            // An example of publishing: "worked" is described in asyncapi.yaml, which is what lets other
+            // apps find it and subscribe. Off the platform the payload is still checked, and nothing is sent.
+            events.publish("worked", mapOf("at" to java.time.Instant.now().toString()))
+{%- endif %}
             runs.incrementAndGet()
             log.info("work done")
         } catch (error: Exception) {

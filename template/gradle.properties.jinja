@@ -1,6 +1,7 @@
 # Micronaut's platform version: Renovate updates it (the regex manager in renovate-preset.json).
 micronautVersion=5.2.2
 org.gradle.jvmargs=-Xmx1536M
-# The template's answers (copier.yml), read by build.gradle.kts: web or worker, none or sqlite.
+# The template's answers (copier.yml), read by build.gradle.kts: web or worker, none or sqlite, none or openapi.
 swhurl.kind={{ kind }}
 swhurl.database={{ database }}
+swhurl.api={{ api if kind == 'web' else 'none' }}

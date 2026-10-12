@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test
 @Property(name = "swhurl.env", value = "staging")
 @Property(name = "swhurl.events.publish", value = "sent,failed")
 @Property(name = "swhurl.events.subscribe", value = "orders.created")
+// The helper alone, not the events this app describes (asyncapi.yaml).
+@Property(name = "swhurl.events.file", value = "none.yaml")
 class EventsTest {
     @Inject
     lateinit var events: Events
