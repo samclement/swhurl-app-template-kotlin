@@ -40,7 +40,7 @@ Then `events.publish("created", mapOf("id" to 42))` and `events.subscribe("order
 
 [`src/main/resources/asyncapi.yaml`](src/main/resources/asyncapi.yaml) describes each event {{ app_name }} publishes ([AsyncAPI 3](https://www.asyncapi.com/docs)): its name, what it means, the schema of its payload and an example. It is the declaration. The platform reads it to show other apps what they can subscribe to, and `events.publish()` throws `EventInvalid` for an event that is not in it or a payload that does not fit, locally as well as on the platform.
 
-To add an event, add to `asyncapi.yaml` a channel (its `address` is the event's name), a message with a `payload` schema and an example, and a `send` operation; then call `events.publish("<name>", data)`. `AsyncApiTest` checks that every event has a description, a schema and an example that fits it. Until the platform reads the file by itself, also list the event under `events.publish` in `swhurl.yaml` (or `make app-events` on the platform).
+To add an event, add to `asyncapi.yaml` a channel (its `address` is the event's name), a message with a `payload` schema and an example, and a `send` operation; then call `events.publish("<name>", data)`. `AsyncApiTest` checks that every event has a description, a schema and an example that fits it. Nothing else is declared: after the push, the platform reads the file for the new image and other apps can subscribe ([what an app offers](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#what-an-app-offers)).
 
 {% endif -%}
 {% if kind == 'web' and api == 'openapi' -%}
