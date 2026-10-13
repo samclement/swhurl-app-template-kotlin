@@ -37,6 +37,7 @@ jobs:
     env:
       APP_DIR: ${{ inputs.template && 'app' || '.' }}
       PUBLISH: ${{ !inputs.template && github.event_name != 'pull_request' }}
+      CHECK_EXPORT: ${{ inputs.template && inputs.answers == 'kind=web database=none api=none events=none' }}
       REUSE_ENABLED: ${{ !inputs.template && inputs.reuse-pr-image && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     defaults:
       run:
@@ -46,14 +47,21 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Checkout image reuse helper
-        if: env.REUSE_ENABLED == 'true'
+        if: env.REUSE_ENABLED == 'true' || env.CHECK_EXPORT == 'true'
         uses: actions/checkout@v7
         with:
           repository: samclement/swhurl-platform
-          ref: 5b917c3a3f188556518aa5eb59e0042a796b20e4
+          ref: 3c1be325a035e99f27ed2bc1ff0d0fbc76a906d7
           path: .swhurl-platform
           sparse-checkout: tools
           persist-credentials: false
+
+      - name: Keep helper and image exports outside the app context
+        if: env.REUSE_ENABLED == 'true' || env.CHECK_EXPORT == 'true'
+        working-directory: .
+        run: |
+          mv .swhurl-platform "$RUNNER_TEMP/swhurl-platform"
+          mkdir -p "$RUNNER_TEMP/swhurl-image"
 
       - name: Identify build inputs and find a tested PR image
         if: env.REUSE_ENABLED == 'true'
@@ -62,11 +70,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # Keep the helper and retained files outside the app's Docker context.
-          mv .swhurl-platform "$RUNNER_TEMP/swhurl-platform"
           export PYTHONPATH="$RUNNER_TEMP/swhurl-platform/tools"
           python3 -m swhurl app-build-image prepare --state "$RUNNER_TEMP/swhurl-image/state.json" \
-            --recipe samclement/swhurl-app-template-kotlin@v0.2.2 --target runtime
+            --recipe samclement/swhurl-app-template-kotlin@v0.2.3 --target runtime
 
       - name: Setup uv (template only)
         if: inputs.template
@@ -145,11 +151,20 @@ jobs:
           file: ${{ steps.candidate.outputs.dockerfile || format('{0}/Dockerfile', env.APP_DIR) }}
           target: ${{ env.REUSE_ENABLED == 'true' && 'runtime' || '' }}
           platforms: linux/amd64
-          load: true
-          outputs: ${{ steps.candidate.outputs.retain == 'true' && format('type=oci,dest={0}/swhurl-image/image.oci.tar', runner.temp) || '' }}
+          load: ${{ !(steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true') }}
+          provenance: ${{ (steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true') && 'mode=max' || '' }}
+          outputs: ${{ (steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true') && format('type=oci,dest={0}/swhurl-image/image.oci.tar', runner.temp) || '' }}
           tags: app:smoke
           cache-to: ${{ steps.meta.outputs.cache-to }}
           cache-from: ${{ steps.meta.outputs.cache-from }}
+
+      - name: Load exported runtime for smoke tests
+        if: steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true'
+        env:
+          PYTHONPATH: ${{ runner.temp }}/swhurl-platform/tools
+        run: |
+          python3 -m swhurl app-build-image load --state "$RUNNER_TEMP/swhurl-image/state.json" \
+            --archive "$RUNNER_TEMP/swhurl-image/image.oci.tar"
 
       # Runs the image as the cluster does, from the app's swhurl.yaml (a web app on /healthz without one):
       # read-only root filesystem with a writable /tmp, the database (if any) on a writable /data. A web app
@@ -225,11 +240,14 @@ jobs:
           echo "smoke test passed ($kind${database:+, $database})"
 
       - name: Prove retained export is the smoke-tested image
-        if: steps.candidate.outputs.retain == 'true'
+        if: steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true'
         id: retained
         env:
           PYTHONPATH: ${{ runner.temp }}/swhurl-platform/tools
         run: |
+          if [ "$CHECK_EXPORT" = true ]; then
+            cp "$GITHUB_WORKSPACE/.github/fixtures/oci-proof-state.json" "$RUNNER_TEMP/swhurl-image/state.json"
+          fi
           python3 -m swhurl app-build-image retain --state "$RUNNER_TEMP/swhurl-image/state.json" \
             --archive "$RUNNER_TEMP/swhurl-image/image.oci.tar" --proof "$RUNNER_TEMP/swhurl-image/proof.json"
 
