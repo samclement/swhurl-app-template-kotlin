@@ -1,4 +1,10 @@
 # Check and package once with the full JDK, then ship only a trimmed Java runtime (jlink) on a distroless base.
+FROM eclipse-temurin:25-jdk AS java-runtime
+# Independent of the app source: new apps and changed source reuse the same trimmed runtime.
+# The Java modules the app, Micronaut and the OpenTelemetry agent use; a missing one fails the smoke test.
+RUN jlink --add-modules java.base,java.desktop,java.instrument,java.logging,java.management,java.naming,java.net.http,java.sql,java.xml,jdk.crypto.ec,jdk.jfr,jdk.management,jdk.unsupported \
+      --strip-debug --no-man-pages --no-header-files --compress=zip-6 --output /jre
+
 FROM eclipse-temurin:25-jdk AS build
 WORKDIR /src
 COPY gradlew settings.gradle.kts build.gradle.kts gradle.properties ./
@@ -14,12 +20,8 @@ RUN ./gradlew --no-daemon check shadowJar copyAgent
 # from there, which fails where /tmp is mounted noexec.
 RUN mkdir /native && cd /native && jar xf /src/build/libs/app-0.1-all.jar org/sqlite/native/Linux/x86_64/libsqlitejdbc.so
 {%- endif %}
-# The Java modules the app, Micronaut and the OpenTelemetry agent use; a missing one fails the smoke test.
-RUN jlink --add-modules java.base,java.desktop,java.instrument,java.logging,java.management,java.naming,java.net.http,java.sql,java.xml,jdk.crypto.ec,jdk.jfr,jdk.management,jdk.unsupported \
-      --strip-debug --no-man-pages --no-header-files --compress=zip-6 --output /jre
-
 FROM gcr.io/distroless/cc-debian12:nonroot AS runtime
-COPY --from=build /jre /opt/java
+COPY --from=java-runtime /jre /opt/java
 WORKDIR /app
 COPY --from=build --chown=65532:65532 /src/build/libs/app-0.1-all.jar /app/app.jar
 COPY --from=build --chown=65532:65532 /src/build/agent/opentelemetry-javaagent.jar /app/opentelemetry-javaagent.jar
