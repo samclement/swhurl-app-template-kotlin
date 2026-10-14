@@ -82,13 +82,15 @@ class HttpController(
 ) {
     private val log = LoggerFactory.getLogger(HttpController::class.java)
 
-    // The platform's readiness and liveness probe. It needs nothing else: the app answers only once
-    // started{% if database == 'sqlite' %}, and the database opens (and migrates) at startup{% endif %}. Probe requests are not traced.
+    // The platform's readiness and liveness probe: the app answers only once started{% if database == 'sqlite' %} (the database
+    // opens and migrates at startup){% endif %}, and reports not ready until its feature flag overrides have arrived
+    // (at most 5 s; FlagWatcher). Probe requests are not traced.
 {%- if api == 'openapi' %}
     @Hidden
 {%- endif %}
     @Get("/healthz")
-    fun health(): Health = Health(true)
+    fun health(): HttpResponse<Health> =
+        if (Flags.store.loaded) HttpResponse.ok(Health(true)) else HttpResponse.status<Health>(HttpStatus.SERVICE_UNAVAILABLE).body(Health(false))
 {%- if api == 'openapi' %}
 
     // The description itself, as other apps and people fetch it.
