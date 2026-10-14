@@ -72,7 +72,7 @@ jobs:
           set -euo pipefail
           export PYTHONPATH="$RUNNER_TEMP/swhurl-platform/tools"
           python3 -m swhurl app-build-image prepare --state "$RUNNER_TEMP/swhurl-image/state.json" \
-            --recipe samclement/swhurl-app-template-kotlin@v0.2.4 --target runtime
+            --recipe samclement/swhurl-app-template-kotlin@v0.2.5 --target runtime
 
       - name: Setup uv (template only)
         if: inputs.template
@@ -106,15 +106,21 @@ jobs:
           if [ -n "$ANSWERS" ]; then scope="template-$(tr ' =' '-_' <<<"$ANSWERS")"; fi
           # A new app's repository starts with an empty GitHub Actions cache, so its first build would
           # install every dependency again. The template's own runs on main therefore also write a registry
-          # cache (public package, one tag per kind and database); every app reads it as a fallback. The
+          # cache (public package, one tag per kind, database and API); every app reads it as a fallback. The
           # dependency layers depend only on Gradle files and the Dockerfile, so they hit for any app.
           # An unreadable or missing registry cache is a warning, not a failure.
-          kind=$(sed -n 's/^kind: *//p' swhurl.yaml | head -1); database=$(sed -n 's/^database: *//p' swhurl.yaml | head -1)
-          shared="ghcr.io/samclement/swhurl-app-template-kotlin-cache:${kind:-web}-${database:-none}"
+          # Gradle's actual inputs also normalise a worker's API to none. Events change source, not dependencies.
+          kind=$(sed -n 's/^swhurl.kind=//p' gradle.properties)
+          database=$(sed -n 's/^swhurl.database=//p' gradle.properties)
+          api=$(sed -n 's/^swhurl.api=//p' gradle.properties)
+          shared="ghcr.io/samclement/swhurl-app-template-kotlin-cache:${kind:-web}-${database:-none}-${api:-none}"
+          legacy="ghcr.io/samclement/swhurl-app-template-kotlin-cache:${kind:-web}-${database:-none}"
           {
             echo "cache-from<<EOF"
             echo "type=gha,scope=$scope"
             echo "type=registry,ref=$shared"
+            # Keep old template caches available while the new tags warm up.
+            echo "type=registry,ref=$legacy"
             echo "EOF"
             echo "cache-to<<EOF"
             # An app does not write its own Actions cache: exporting every layer, base image included, was most
@@ -175,6 +181,12 @@ jobs:
           set -Eeuo pipefail
           field() { if [ -f swhurl.yaml ]; then sed -n "s/^$1: *//p" swhurl.yaml | head -1; fi; }
           trap 'result=$?; if [ "$result" -ne 0 ]; then docker logs smoke || true; fi' EXIT
+          stays_running() {
+            for _ in 1 2 3 4; do
+              sleep 1
+              [ "$(docker inspect -f '{{.State.Running}}' smoke)" = true ] || return 1
+            done
+          }
           kind=$(field kind); kind=${kind:-web}; database=$(field database)
           args=(--read-only --tmpfs /tmp)
           if [ "$database" = sqlite ]; then data_dir=$(mktemp -d); chmod 1777 "$data_dir"; args+=(-v "$data_dir:/data" -e DATABASE_PATH=/data/app.db); fi
@@ -192,8 +204,7 @@ jobs:
             curl -fsS "http://127.0.0.1:18080$path" >/dev/null || { docker logs smoke; exit 1; }
             curl -fsS http://127.0.0.1:18080/ >/dev/null || { docker logs smoke; exit 1; }
           fi
-          sleep 10
-          [ "$(docker inspect -f '{{.State.Running}}' smoke)" = true ] || { docker logs smoke; exit 1; }
+          stays_running || { docker logs smoke; exit 1; }
           if [ "$database" = sqlite ]; then
             docker stop smoke
             python3 - "$data_dir/app.db" "$data_dir/before.json" <<'PYSQL'
@@ -218,8 +229,7 @@ jobs:
               curl -fsS "http://127.0.0.1:18080$path" >/dev/null
               curl -fsS http://127.0.0.1:18080/ >/dev/null
             fi
-            sleep 10
-            [ "$(docker inspect -f '{{.State.Running}}' smoke)" = true ] || { docker logs smoke; exit 1; }
+            stays_running || { docker logs smoke; exit 1; }
             docker stop smoke
             python3 - "$data_dir/app.db" "$data_dir/before.json" <<'PYSQL'
           import json, shutil, sqlite3, sys, tempfile
