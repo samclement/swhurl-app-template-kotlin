@@ -23,6 +23,17 @@ A background worker with no web address: `Worker.kt` runs `work()` every `WORK_I
 
 `platform.notify("Order backlog", message = "412 orders waiting", priority = "high")` (in `Platform.kt`) sends a message to the notification channel of the team that owns this app ([notifications](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#notifications)). Nothing is declared in `swhurl.yaml`: the platform gives every app the address and a token. The message arrives titled `<app>/<env>: Order backlog`. The call returns whether the platform accepted it and never throws; an app may send 30 an hour, and a team without a channel delivers nothing.{% if kind == 'web' %} `POST /notify` in `HttpController.kt` is an example to replace.{% endif %} Locally there is no notify service: `notify` returns `false` and sends nothing.
 
+## Feature flags
+
+Declare a flag in `swhurl.yaml` with a type, a default and, where it differs, a value for `staging` or `prod` ([feature flags](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#feature-flags)):
+
+```yaml
+flags:
+  new-checkout: {type: boolean, description: Use the new checkout flow, default: false, staging: true}
+```
+
+Before every compile, `./gradlew flags` (`gradle/flags.gradle.kts`) checks the declarations and generates the `Flags` object under `build/generated/flags`: `if (Flags.newCheckout)`. A flag is the value declared for `SWHURL_ENV`, otherwise its default, which is also what local runs get. Types: `boolean`, `integer` (`Int`), `number` (`Double`; both with optional `min` and `max`) and `string` (with an optional `enum`). To remove a flag, delete it from `swhurl.yaml`: the compiler then names each place that still reads it.{% if flags == 'example' %} `shout`, read in {% if kind == 'web' %}`HttpController.kt`{% else %}`Worker.kt`{% endif %}, is an example to replace.{% endif %}
+
 ## Events
 
 `Events.kt` publishes and receives events on the platform's NATS ([events](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#events)). Declare them in `swhurl.yaml` before the app is created (afterwards: `make app-events` on the platform):
