@@ -41,7 +41,12 @@ class Worker(
             events.publish("worked", mapOf("at" to java.time.Instant.now().toString()))
 {%- endif %}
             runs.incrementAndGet()
+{%- if flags == 'example' %}
+            // An example of a feature flag: shout is declared in swhurl.yaml, on in staging only.
+            log.info(if (Flags.shout) "WORK DONE" else "work done")
+{%- else %}
             log.info("work done")
+{%- endif %}
         } catch (error: Exception) {
             log.error("work failed", error)
         }

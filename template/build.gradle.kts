@@ -15,6 +15,12 @@ val kind = providers.gradleProperty("swhurl.kind").get()
 val database = providers.gradleProperty("swhurl.database").get()
 val api = providers.gradleProperty("swhurl.api").get()
 
+// Feature flags: the Flags object is generated from swhurl.yaml before every compile (gradle/flags.gradle.kts).
+apply(from = "gradle/flags.gradle.kts")
+kotlin.sourceSets.main {
+    kotlin.srcDir(tasks.named("flags"))
+}
+
 repositories {
     mavenCentral()
 }

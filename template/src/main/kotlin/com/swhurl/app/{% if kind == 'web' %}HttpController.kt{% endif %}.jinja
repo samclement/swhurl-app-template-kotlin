@@ -169,6 +169,12 @@ class HttpController(
             }
         }
         logged(request, 200)
-        return Hello("hello from $serviceName", serviceName, caller(request), {% if database == 'sqlite' %}visits{% else %}null{% endif %})
+{%- if flags == 'example' %}
+        // An example of a feature flag: shout is declared in swhurl.yaml, on in staging only.
+        val greeting = "hello from $serviceName"
+        return Hello(if (Flags.shout) greeting.uppercase() else greeting, serviceName,
+{%- else %}
+        return Hello("hello from $serviceName", serviceName,
+{%- endif %} caller(request), {% if database == 'sqlite' %}visits{% else %}null{% endif %})
     }
 }

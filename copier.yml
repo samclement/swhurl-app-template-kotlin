@@ -49,3 +49,11 @@ events:
     none: none
     asyncapi: asyncapi
   default: none
+
+flags:
+  type: str
+  help: "example: declares one feature flag in swhurl.yaml (shout, on in staging only) and reads it in the example code; every app can declare flags"
+  choices:
+    none: none
+    example: example
+  default: none

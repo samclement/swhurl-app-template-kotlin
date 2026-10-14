@@ -23,13 +23,14 @@ jobs:
         # them together for each kind: this grows with the number of choices, not with their product.
         # The platform's make check-templates still renders every combination (it builds nothing).
         answers:
-          - kind=web database=none api=none events=none
-          - kind=worker database=none api=none events=none
-          - kind=web database=sqlite api=none events=none
-          - kind=web database=none api=openapi events=none
-          - kind=web database=none api=none events=asyncapi
-          - kind=web database=sqlite api=openapi events=asyncapi
-          - kind=worker database=sqlite api=none events=asyncapi
+          - kind=web database=none api=none events=none flags=none
+          - kind=worker database=none api=none events=none flags=none
+          - kind=web database=sqlite api=none events=none flags=none
+          - kind=web database=none api=openapi events=none flags=none
+          - kind=web database=none api=none events=asyncapi flags=none
+          - kind=web database=none api=none events=none flags=example
+          - kind=web database=sqlite api=openapi events=asyncapi flags=example
+          - kind=worker database=sqlite api=none events=asyncapi flags=example
     uses: ./.github/workflows/app.yml
     with:
       template: true
