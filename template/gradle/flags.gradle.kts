@@ -9,7 +9,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath("org.yaml:snakeyaml:2.4")
+        classpath("org.yaml:snakeyaml:2.7")
     }
 }
 
