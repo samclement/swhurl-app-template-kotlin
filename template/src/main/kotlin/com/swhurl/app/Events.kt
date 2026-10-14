@@ -143,6 +143,9 @@ class Events(private val platform: Platform, private val json: JsonMapper) {
         }
     }
 
+    /** The app's NATS connection, opened on first use: events and feature flag overrides (FlagWatcher) share it. */
+    fun connection(): Connection = connected()
+
     @Synchronized
     private fun connected(): Connection {
         connection?.let { return it }

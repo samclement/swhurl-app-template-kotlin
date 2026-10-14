@@ -90,26 +90,26 @@ fun generate(declaration: Any?): String {
         "// https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#feature-flags",
         "package com.swhurl.app",
         "",
-        "/** This app's feature flags: each is the value swhurl.yaml declares for this environment. */",
+        "/** This app's feature flags: an override from the console, else the value swhurl.yaml declares for this environment. */",
         "object Flags {",
     )
-    if (flags.isNotEmpty()) {
-        lines += "    private val store = FlagStore(mapOf("
-        for ((name, flag) in flags) {
-            flag as Map<*, *>
-            val type = flag["type"] as String
-            val values = (listOf("default") + environments).joinToString(", ") { "$it = ${literal(type, flag[it])}" }
-            lines += "        \"$name\" to FlagStore.Declared($values),"
-        }
-        lines += "    ))"
-        for ((name, flag) in flags) {
-            flag as Map<*, *>
-            val description = (flag["description"] as String?)?.replace("*/", "*\\/")?.replace(Regex("\\s+"), " ")?.trim()
-            lines += ""
-            if (!description.isNullOrEmpty()) lines += "    /** $description */"
-            val type = types.getValue(flag["type"] as String)
-            lines += "    val ${property(name.toString())}: $type get() = store.value(\"$name\") as $type"
-        }
+    lines += if (flags.isEmpty()) "    val store = FlagStore(emptyMap())" else "    val store = FlagStore(mapOf("
+    for ((name, flag) in flags) {
+        flag as Map<*, *>
+        val type = flag["type"] as String
+        val values = (listOf("default") + environments).joinToString(", ") { "$it = ${literal(type, flag[it])}" }
+        val bounds = listOf("min", "max").filter { it in flag }.joinToString("") { ", $it = ${(flag[it] as Number).toDouble()}" }
+        val choices = (flag["enum"] as List<*>?)?.joinToString(", ", ", choices = listOf(", ")") { literal("string", it) } ?: ""
+        lines += "        \"$name\" to FlagStore.Declared(\"$type\", $values$bounds$choices),"
+    }
+    if (flags.isNotEmpty()) lines += "    ))"
+    for ((name, flag) in flags) {
+        flag as Map<*, *>
+        val description = (flag["description"] as String?)?.replace("*/", "*\\/")?.replace(Regex("\\s+"), " ")?.trim()
+        lines += ""
+        if (!description.isNullOrEmpty()) lines += "    /** $description */"
+        val type = types.getValue(flag["type"] as String)
+        lines += "    val ${property(name.toString())}: $type get() = store.value(\"$name\") as $type"
     }
     lines += "}"
     return lines.joinToString("\n", postfix = "\n")
