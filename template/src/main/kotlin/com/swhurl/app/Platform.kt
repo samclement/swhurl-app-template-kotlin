@@ -127,7 +127,7 @@ class Platform(private val environment: Environment, private val json: JsonMappe
     }
 
     /**
-     * GET a path of another app this one declared in swhurl.yaml (`calls: [name]`): the same
+     * GET a path of another app this one has been granted a call to on the platform: the same
      * environment's instance, with this app's token for it. The OpenTelemetry agent adds the trace
      * headers, so the callee's spans join this request's trace.
      */
@@ -136,7 +136,7 @@ class Platform(private val environment: Environment, private val json: JsonMappe
         val base = System.getenv(variable)
             ?: environment.getProperty("swhurl.service.$name.url", String::class.java).orElse(null)
             ?: throw IllegalStateException(
-                "$variable is not set: declare the call (calls: [$name] in swhurl.yaml, or make app-calls on the platform)",
+                "$variable is not set: grant the call on the platform (the app page's Connect to an app, or make app-calls ARGS=\"--add $name\")",
             )
         val request = HttpRequest.newBuilder(URI.create(base.trimEnd('/') + path)).timeout(Duration.ofSeconds(10))
         // The platform replaces the token file every few minutes, so read it for each call. Locally

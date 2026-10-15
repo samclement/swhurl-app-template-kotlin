@@ -1,26 +1,33 @@
-# What this app needs from the swhurl platform. Read by the platform's `make app-new --from-repo`;
-# fields: https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#swhurlyaml
+# This app's identity, what its image needs and what it offers, read by the swhurl platform.
+# Each field and its kind: https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#swhurlyaml
+
+# Identity: what the app is
 version: 1
 stack: kotlin
 kind: {{ kind }}
+
+# Needs: what the image needs to run
 {%- if kind == 'web' %}
 port: 8080
 healthPath: /healthz
 {%- endif %}
 uid: 65532
 telemetry: otlp
-autoDeploy: true
 {%- if database == 'sqlite' %}
 database: sqlite
 {%- endif %}
-# The JVM needs more than the platform's defaults (10m, 32Mi, limit 128Mi).
+# The JVM's minimum: more than the platform's defaults (10m, 32Mi, limit 128Mi).
 resources:
   cpu: 100m
   memory: 192Mi
   memoryLimit: 384Mi
+{%- if kind == 'web' and api == 'openapi' or events == 'asyncapi' or flags == 'example' %}
+
+# Offers: what other apps can use
+{%- endif %}
 {%- if kind == 'web' and api == 'openapi' or events == 'asyncapi' %}
-# What this app offers other apps: its API description (served, and kept in the repository) and its events.
-# The platform reads both files for every image; the events file says what the app publishes.
+# Its API description (served, and kept in the repository) and its events. The platform reads both
+# files for every image; the events file says what the app publishes.
 provides:
 {%- if kind == 'web' and api == 'openapi' %}
   api: /openapi.yaml
@@ -40,3 +47,6 @@ flags:
     default: false
     staging: true
 {%- endif %}
+
+# Grants are set on the platform, not here: the team, who can reach the app, the apps it calls, the
+# events it receives and its alerts (the console's New app form and app page, or make app-*).
