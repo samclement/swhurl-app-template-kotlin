@@ -31,21 +31,23 @@ Shared by every Kotlin app and kept at the top level: [`.github/workflows/app.ym
 
 ## The contract with the platform
 
+[`swhurl.yaml`](template/swhurl.yaml.jinja) tells the platform what this app is, what its image needs and what it offers, under one comment per kind: its identity (`version`, `stack`, `kind`); its needs (port, health path, user, telemetry, resources and, when used, a database and secret names); its offers (its API and events documents, feature flags). Each field's kind is listed in the platform's [apps guide](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#swhurlyaml). What the platform allows the app (its grants: team, who can reach it, the apps it calls, the events it receives, alerts) is never in it: it is set on the platform.
+
 | | Value | Where |
 | --- | --- | --- |
 | Port (web) | `8080` | `application.properties` |
 | Health path (web) | `GET /healthz` returns `{"ok":true}` once the app has started (with a database, after it opened and migrated) | `HttpController.kt` |
 | Start-up | a JVM with the agent starts in about 10 s, longer on a busy node; the platform gives every web app up to 120 s before liveness checks begin, and the smoke test waits as long | the platform |
-| Resources | 100m CPU, 192Mi memory, limit 384Mi (the heap is 70% of the limit) | `swhurl.yaml`, `Dockerfile` |
+| Resources | at least 100m CPU, 192Mi memory, limit 384Mi (the heap is 70% of the limit): a need, under `resources` | `swhurl.yaml`, `Dockerfile` |
 | User | UID 65532, read-only root filesystem friendly (writes only to `/tmp`, and `/data` with a database) | distroless `nonroot` base image |
 | OpenTelemetry | the [Java agent](https://opentelemetry.io/docs/zero-code/java/agent/), loaded by the image; traces and JVM metrics over OTLP, logs not exported (stdout is collected) | `build.gradle.kts` (`copyAgent`), `Dockerfile` |
 | Logs | JSON on stdout (logback's `JsonEncoder`), with `trace_id` and `span_id` from the agent | `logback.xml` |
 | Image | a `jlink` Java 25 runtime with only the modules the app needs, on `distroless/cc`: about 150 MB with the agent, half a stock JRE image | `Dockerfile` |
 | Image tags | `<run number>-<short sha>`, never `latest` | the shared `app.yml` |
 
-Every app also gets `Platform.kt`: it tells a web app whether a request comes from another app (a platform-issued token for this app alone), a signed-in person or nobody, and `platform.call("name", "/path")` calls an app declared under `calls:` in `swhurl.yaml` with this app's token for it ([calling another app](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#calling-another-app)). It checks tokens with the JDK's own `java.security`; the only added dependency is the OpenTelemetry API, to name the caller on the span.
+Every app also gets `Platform.kt`: it tells a web app whether a request comes from another app (a platform-issued token for this app alone), a signed-in person or nobody, and `platform.call("name", "/path")` calls an app this one has been granted a call to on the platform, with this app's token for it ([calling another app](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#calling-another-app)). It checks tokens with the JDK's own `java.security`; the only added dependency is the OpenTelemetry API, to name the caller on the span.
 
-`Events.kt` does the same for [events](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#events): `events.publish("created", data)` and `events.subscribe("orders.created") { ... }` for the events declared under `events:` in `swhurl.yaml`, over NATS JetStream with the app's own key, as CloudEvents carrying the trace. It adds the `jnats` client.
+`Events.kt` does the same for [events](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#events): `events.publish("created", data)` and `events.subscribe("orders.created") { ... }` for the events it publishes (declared in `swhurl.yaml` or `asyncapi.yaml`) and has been granted to receive, over NATS JetStream with the app's own key, as CloudEvents carrying the trace. It adds the `jnats` client.
 
 What the platform injects: `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, `OTEL_SERVICE_NAME` (the app name), and `DATABASE_PATH` with a database. Sign-in happens before requests reach the app; it can read the user from `X-Auth-Request-Email`.
 
