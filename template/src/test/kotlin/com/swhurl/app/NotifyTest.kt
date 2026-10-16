@@ -10,6 +10,7 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -90,5 +91,19 @@ class NotifyOffPlatformTest {
     @Test
     fun `without the platform's address nothing is sent`() {
         assertFalse(platform.notify("Order backlog"))
+    }
+}
+
+// A secret the image lists without a value deploys all the same: the code that needs it is told how to set it.
+@MicronautTest(startApplication = false)
+class SecretTest {
+    @Inject
+    lateinit var platform: Platform
+
+    @Test
+    fun `a missing secret names the command that sets it`() {
+        val error = assertThrows(IllegalStateException::class.java) { platform.secret("EXAMPLE_TOKEN_NOT_SET") }
+        assertTrue(error.message!!.startsWith("secret EXAMPLE_TOKEN_NOT_SET has no value: set it on the platform (make app-secret APP="))
+        assertTrue(error.message!!.contains("NAME=EXAMPLE_TOKEN_NOT_SET)"))
     }
 }
