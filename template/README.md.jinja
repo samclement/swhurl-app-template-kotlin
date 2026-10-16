@@ -17,6 +17,7 @@ A background worker with no web address: `Worker.kt` runs `work()` every `WORK_I
 {% if kind == 'web' %}
 - **Who is calling.** `CallerFilter` (in `HttpController.kt`) runs before every route except `/healthz` and puts a `Caller` on the request: type `app` with the app's name (it sent a token the platform issued for this app alone), `user` with a signed-in person's email, or `anonymous`. A bad token is answered 401. Every request's log line and span carry `caller.type` and `caller.id`. For a route only apps may use, call `platform.requireApp(caller)`.
 {%- endif %}
+- **Secrets.** List each secret variable the app reads under `secrets:` in `swhurl.yaml` and read it with `platform.secret("API_TOKEN")`. Its value is set on the platform, never here: `make app-secret APP=<app> ENV=<env> NAME=API_TOKEN` in the platform checkout. A name pushed before its value deploys all the same; `secret()` then fails with a message naming that command, and the app page shows it as value missing.
 - **Calling another app.** A call is granted on the platform, not in this repository: tick `orders` under **Connections** when creating the app, or later use the app page's **Connect to an app** or `make app-calls`. Then `platform.call("orders", "/path")` reaches the same environment's `orders` with this app's token for it; the callee's spans join the same trace.{% if kind == 'web' %} `GET /call/orders` in `HttpController.kt` is an example to replace.{% endif %}
 
 ## Notifications

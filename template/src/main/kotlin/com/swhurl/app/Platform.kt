@@ -127,6 +127,17 @@ class Platform(private val environment: Environment, private val json: JsonMappe
     }
 
     /**
+     * A secret this app reads: list its name in swhurl.yaml's secrets, and set its value on the
+     * platform. A name listed without a value deploys all the same, so the code that needs it fails
+     * here, saying how to set it.
+     */
+    fun secret(name: String): String =
+        setting(name) ?: throw IllegalStateException(
+            "secret $name has no value: set it on the platform (make app-secret APP=${setting("SWHURL_APP") ?: "<app>"} " +
+                "ENV=${setting("SWHURL_ENV") ?: "<env>"} NAME=$name) and list it in swhurl.yaml's secrets",
+        )
+
+    /**
      * GET a path of another app this one has been granted a call to on the platform: the same
      * environment's instance, with this app's token for it. The OpenTelemetry agent adds the trace
      * headers, so the callee's spans join this request's trace.
