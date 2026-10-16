@@ -190,7 +190,8 @@ jobs:
           kind=$(field kind); kind=${kind:-web}; database=$(field database)
           args=(--read-only --tmpfs /tmp)
           if [ "$database" = sqlite ]; then data_dir=$(mktemp -d); chmod 1777 "$data_dir"; args+=(-v "$data_dir:/data" -e DATABASE_PATH=/data/app.db); fi
-          if [ "$kind" = web ]; then args+=(-p 18080:8080); fi
+          port=$(field port); port=${port:-8080}   # where the image listens: swhurl.yaml's port, as on the platform
+          if [ "$kind" = web ]; then args+=(-p "18080:$port"); fi
           docker run -d --name smoke "${args[@]}" app:smoke
           SECONDS=0
           if [ "$kind" = web ]; then
