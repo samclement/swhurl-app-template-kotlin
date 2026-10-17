@@ -12,6 +12,8 @@ make app-repo NAME=<app> STACK=kotlin ANSWERS="kind=web database=sqlite"
 
 Either creates the public repository `samclement/<app>`, waits for its first image and adds it to staging ([start a new app](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#start-a-new-app)). From then on every push to `main` reaches staging on its own; production changes through **Promote to production**.
 
+**A new app with the default answers starts on a seed image.** Its first run's `seed` job copies the image the template's own CI built and smoke-tested for the same answers and revision (`ghcr.io/samclement/swhurl-app-template-kotlin:seed-<template commit>`) to `<app>:0-<sha>`, in seconds, so the platform deploys the app without waiting for its build (about two minutes). With the defaults the code is the template's own: the app's name reaches only the README, the answers file and Micronaut's application name, which nothing reads (the platform sets `OTEL_SERVICE_NAME`). The same run's build publishes `1-<sha>`, which image automation deploys next. Other answers have no seed: the build is the first image.
+
 ## How this repository is laid out
 
 A [Copier](https://copier.readthedocs.io/) template, like the [TypeScript one](https://github.com/samclement/swhurl-app-template-typescript): `template/` is the app, and [`copier.yml`](copier.yml) asks for its name, description and features:
