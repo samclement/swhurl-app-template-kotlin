@@ -16,10 +16,6 @@ permissions:
 
 jobs:
   app:
-<<<<<<< HEAD
     uses: samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v0.2.15
-=======
-    uses: samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v0.2.15
->>>>>>> c8d0161 (A seed image for every tested set of answers, so each app type starts from one)
     with:
       reuse-pr-image: true
