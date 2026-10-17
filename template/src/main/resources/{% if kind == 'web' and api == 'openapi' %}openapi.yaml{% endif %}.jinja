@@ -69,8 +69,12 @@ components:
         id:
           type: string
           nullable: true
-      description: "Who sent a request: type \"app\" (id: the app's name), \"user\"\
-        \ (id: their email) or \"anonymous\"."
+        user:
+          type: string
+          nullable: true
+      description: "Who sent a request: type \"app\" (id: the app's name; user: the\
+        \ signed-in person it is calling for, when it named one), \"user\" (id: their\
+        \ email) or \"anonymous\"."
     Hello:
       required:
       - caller

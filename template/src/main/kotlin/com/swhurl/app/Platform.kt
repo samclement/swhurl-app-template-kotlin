@@ -22,9 +22,22 @@ import org.slf4j.LoggerFactory
 // What the swhurl platform gives this app: who is calling it, and how to call the apps it declared.
 // https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#calling-another-app
 
-/** Who sent a request: type "app" (id: the app's name), "user" (id: their email) or "anonymous". */
+/**
+ * Who sent a request: type "app" (id: the app's name; user: the signed-in person it is calling for, when
+ * it named one), "user" (id: their email) or "anonymous".
+ */
 @Serdeable
-data class Caller(val type: String, val id: String?)
+data class Caller(val type: String, val id: String?, val user: String? = null)
+
+/** The header a call carries the person in; read only beside a valid app token. */
+const val USER_HEADER = "X-Swhurl-User"
+
+/** The signed-in person behind a caller: the person themselves, or the one an app called for. */
+fun personOf(caller: Caller?): String? = when (caller?.type) {
+    "user" -> caller.id
+    "app" -> caller.user
+    else -> null
+}
 
 /** The request carried a token this app does not accept: answer 401 with the message. */
 class Unauthorized(message: String) : RuntimeException(message)
@@ -44,12 +57,13 @@ class Platform(private val environment: Environment, private val json: JsonMappe
 
     /**
      * Who sent this request. A request with a bearer token must carry a good one (Unauthorized
-     * otherwise). Without a token it is a person: signed in when the platform's sign-in put their
-     * email on the request, anonymous otherwise.
+     * otherwise), and is an app; with the token, `user` (the X-Swhurl-User header) names the person
+     * that app is calling for. Without a token it is a person: signed in when the platform's sign-in
+     * put their email on the request, anonymous otherwise (`user` is ignored).
      */
-    fun identify(authorization: String?, email: String?): Caller {
+    fun identify(authorization: String?, email: String?, user: String? = null): Caller {
         if (authorization != null && authorization.startsWith("Bearer ", ignoreCase = true)) {
-            return appCaller(authorization.substring(7).trim())
+            return appCaller(authorization.substring(7).trim(), user)
         }
         return if (email.isNullOrBlank()) Caller("anonymous", null) else Caller("user", email)
     }
@@ -70,7 +84,7 @@ class Platform(private val environment: Environment, private val json: JsonMappe
 
     private fun text(node: JsonNode?): String? = if (node != null && node.isString) node.stringValue else null
 
-    private fun appCaller(token: String): Caller {
+    private fun appCaller(token: String, user: String?): Caller {
         val app = setting("SWHURL_APP")
         val env = setting("SWHURL_ENV")
         val issuer = setting("SWHURL_AUTH_ISSUER")
@@ -123,7 +137,12 @@ class Platform(private val environment: Environment, private val json: JsonMappe
         }
         val allowed = (setting("SWHURL_ALLOWED_CALLERS") ?: "").split(",").filter { it.isNotEmpty() }
         if (caller !in allowed) throw Unauthorized("$caller is not allowed to call $app")
-        return Caller("app", caller)
+        // An allowed caller is trusted to name the person truthfully, as it is trusted with its own token.
+        if (user.isNullOrEmpty()) return Caller("app", caller)
+        if (user.length > 254 || !Regex("^[^\\s@]+@[^\\s@]+$").matches(user)) {
+            throw Unauthorized("${USER_HEADER.lowercase()} is not an email address")
+        }
+        return Caller("app", caller, user)
     }
 
     /**
@@ -141,8 +160,11 @@ class Platform(private val environment: Environment, private val json: JsonMappe
      * GET a path of another app this one has been granted a call to on the platform: the same
      * environment's instance, with this app's token for it. The OpenTelemetry agent adds the trace
      * headers, so the callee's spans join this request's trace.
+     *
+     * Pass the request's caller as onBehalfOf to tell the callee which signed-in person the call is for
+     * (personOf: the person, or the one an app caller named); without it, the call carries no person.
      */
-    fun call(name: String, path: String): HttpResponse<String> {
+    fun call(name: String, path: String, onBehalfOf: Caller? = null): HttpResponse<String> {
         val variable = "SWHURL_SERVICE_${name.uppercase().replace('-', '_')}_URL"
         val base = System.getenv(variable)
             ?: environment.getProperty("swhurl.service.$name.url", String::class.java).orElse(null)
@@ -154,6 +176,7 @@ class Platform(private val environment: Environment, private val json: JsonMappe
         // there is none: point the variable at a stub that does not check tokens.
         val token = Path.of(setting("SWHURL_TOKENS_DIR") ?: "/var/run/swhurl/tokens", name, "token")
         if (Files.exists(token)) request.header("Authorization", "Bearer ${Files.readString(token).trim()}")
+        personOf(onBehalfOf)?.let { request.header(USER_HEADER, it) }
         return client.send(request.GET().build(), HttpResponse.BodyHandlers.ofString())
     }
 

@@ -54,10 +54,15 @@ class CallerFilter(private val platform: Platform) {
     fun identify(request: HttpRequest<*>): HttpResponse<*>? {
         if (request.path == "/healthz") return null
         return try {
-            val caller = platform.identify(request.headers.get("Authorization"), request.headers.get("X-Auth-Request-Email"))
+            val caller = platform.identify(
+                request.headers.get("Authorization"),
+                request.headers.get("X-Auth-Request-Email"),
+                request.headers.get(USER_HEADER),
+            )
             request.setAttribute(CALLER, caller)
             Span.current().setAttribute("caller.type", caller.type)
             if (caller.id != null) Span.current().setAttribute("caller.id", caller.id)
+            if (caller.user != null) Span.current().setAttribute("user.email", caller.user)
             null
         } catch (refused: Unauthorized) {
             log.warn("request refused: ${refused.message}")
@@ -107,20 +112,23 @@ class HttpController(
         val caller = caller(request)
         MDC.putCloseable("caller.type", caller.type).use {
             MDC.putCloseable("caller.id", caller.id ?: "").use {
-                log.info("request handled: ${request.methodName} ${request.path} $status")
+                MDC.putCloseable("user.email", caller.user ?: "").use {
+                    log.info("request handled: ${request.methodName} ${request.path} $status")
+                }
             }
         }
     }
 
     // An example of calling another app: GET /call/orders asks the app "orders" for its "/" and returns
     // what it said. It works once the platform grants this app the call (make app-calls).
+    // onBehalfOf tells orders who is signed in here, so its "/" names this app and that person.
 {%- if api == 'openapi' %}
     @Operation(summary = "Ask another app for its greeting (an example of calling)")
 {%- endif %}
     @Get("/call/{name}")
     fun call(@PathVariable name: String, request: HttpRequest<*>): HttpResponse<Called> {
         val result = try {
-            val reply = platform.call(name, "/")
+            val reply = platform.call(name, "/", onBehalfOf = caller(request))
             Called(name, reply.statusCode(), reply.body())
         } catch (problem: Exception) {
             Called(name, 0, problem.message ?: problem.javaClass.simpleName)
@@ -165,7 +173,8 @@ class HttpController(
 {%- endif %}
             try {
                 val caller = caller(request)
-                events.publish(declared, mapOf("path" to "/", "caller" to mapOf("type" to caller.type, "id" to caller.id)))
+                val named = mapOf("type" to caller.type, "id" to caller.id) + (caller.user?.let { mapOf("user" to it) } ?: emptyMap())
+                events.publish(declared, mapOf("path" to "/", "caller" to named))
             } catch (problem: Exception) {
                 log.error("event not published: $declared: ${problem.message}")
             }
