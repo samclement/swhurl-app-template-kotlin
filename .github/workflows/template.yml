@@ -31,7 +31,36 @@ jobs:
           - kind=web database=none api=none events=none flags=example
           - kind=web database=sqlite api=openapi events=asyncapi flags=example
           - kind=worker database=sqlite api=none events=asyncapi flags=example
+          # The platform's app types (swhurl-platform contract.APP_TYPES) not already above: each is a seed.
+          - kind=worker database=none api=none events=asyncapi flags=example
     uses: ./.github/workflows/app.yml
     with:
       template: true
       answers: ${{ matrix.answers }}
+
+  # Seeds are one image per set of answers per main commit: keep 30 days of them. Only versions whose every
+  # tag is a seed are deleted; the platform pins a recent commit, and an older one only loses its seeds
+  # (a new app's first run then builds instead).
+  prune-seeds:
+    name: Keep 30 days of seeds
+    needs: app
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete seeds older than 30 days
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE: /users/samclement/packages/container/swhurl-app-template-kotlin/versions
+        run: |
+          set -uo pipefail
+          cutoff=$(date -u -d '30 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          if ! ids=$(gh api --paginate "$PACKAGE" --jq ".[] | select(.created_at < \"$cutoff\") | select((.metadata.container.tags | length) > 0 and all(.metadata.container.tags[]; startswith(\"seed-\"))) | .id"); then
+            echo "::warning::could not list $PACKAGE; no seed was deleted"
+            exit 0
+          fi
+          for id in $ids; do
+            gh api -X DELETE "$PACKAGE/$id" || echo "::warning::could not delete version $id"
+          done
+          echo "Deleted $(printf '%s' "$ids" | grep -c . || true) seed version(s) older than $cutoff" >> "$GITHUB_STEP_SUMMARY"
