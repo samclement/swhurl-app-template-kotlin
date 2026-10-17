@@ -102,7 +102,7 @@ jobs:
     env:
       APP_DIR: ${{ inputs.template && 'app' || '.' }}
       PUBLISH: ${{ !inputs.template && github.event_name != 'pull_request' }}
-      CHECK_EXPORT: ${{ inputs.template && inputs.answers == 'kind=web database=none api=none events=none' }}
+      CHECK_EXPORT: ${{ inputs.template && inputs.answers == 'kind=web database=none api=none events=none flags=none' }}  # the Template workflow's first matrix entry, exactly
       REUSE_ENABLED: ${{ !inputs.template && inputs.reuse-pr-image && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     defaults:
       run:
