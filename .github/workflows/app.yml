@@ -31,18 +31,18 @@ on:
 # workflow-only upgrades of older callers need no additional scope until they opt in.
 
 env:
-  # The answers whose tested image the template publishes as a new app's first image (the seed job).
-  # The Template workflow's first matrix entry; with these answers an app's code is the template's own:
-  # its name only reaches the README, the answers file and Micronaut's application name, which nothing
-  # reads (the platform sets OTEL_SERVICE_NAME and the rest at runtime).
-  SEED_ANSWERS: kind=web database=none api=none events=none flags=none
+  # The template's own CI publishes the image it built and smoke-tested for each set of answers in its
+  # Template workflow as seed-<commit>-<kind>-<database>-<api>-<events>-<flags> (the values in that
+  # order); a new app's first run copies the one for its own answers (the seed job). The platform's app
+  # types are among those sets. The image does not depend on the app's name: the platform gives it its
+  # name and description at runtime.
   SEED_IMAGE: ghcr.io/samclement/swhurl-app-template-kotlin
 
 jobs:
   # A new app's first run: copy the template's image for the same answers and revision, already built
   # and smoke-tested by the template's own CI on main, to this app's 0-<sha>. The platform can then
   # deploy the app at once; this run's own build publishes <run>-<sha>, which image automation deploys
-  # next (1 sorts above 0). Other answers, or no seed for that revision: nothing here, the build is the
+  # next (1 sorts above 0). Answers the template's CI does not build, or no seed for that revision: the build is the
   # first image as before. It never fails the run.
   seed:
     name: Seed the first image
@@ -63,17 +63,14 @@ jobs:
             printf '%s=%s ' "$question" "$(sed -n "s/^$question: *//p" .copier-answers.yml | head -1)"
           done)
           answers=${answers% }
-          if [ "$answers" != "$SEED_ANSWERS" ]; then
-            echo "No seed: $answers are not the template's defaults; this run's build is the first image." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
+          slug=$(printf '%s' "$answers" | sed 's/[a-z]*=//g; s/ /-/g')   # web-sqlite-openapi-asyncapi-example
           ref=$(sed -n 's/^_commit: *//p' .copier-answers.yml | head -1)
           case "$ref" in *-g*) ref=${ref##*-g} ;; esac   # git describe: v0.2.11-3-g1a2b3c4
           if ! sha=$(gh api "repos/samclement/swhurl-app-template-kotlin/commits/$ref" --jq .sha); then
             echo "No seed: cannot resolve template revision $ref." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          echo "source=$SEED_IMAGE:seed-$sha" >> "$GITHUB_OUTPUT"
+          echo "source=$SEED_IMAGE:seed-$sha-$slug" >> "$GITHUB_OUTPUT"
 
       - name: Login to GHCR
         if: steps.seed.outputs.source
@@ -93,7 +90,7 @@ jobs:
           if docker buildx imagetools create --tag "$target" "$SOURCE"; then
             echo "Seeded \`$target\` from \`$SOURCE\`; this run's build publishes the app's own image next." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "No seed: copying $SOURCE failed; this run's build is the first image." >> "$GITHUB_STEP_SUMMARY"
+            echo "No seed: \`$SOURCE\` is not published (the template's CI builds only some answers, and keeps 30 days of seeds); this run's build is the first image." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   build:
@@ -315,14 +312,17 @@ jobs:
           fi
           echo "smoke test passed ($kind${database:+, $database})"
 
-      # The defaults' tested image, kept for new apps' seed job (above). Only main's: a release tags a main commit.
-      - name: Publish the smoke-tested image as new apps' seed (template main, default answers)
-        if: inputs.template && inputs.answers == env.SEED_ANSWERS && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      # Each set of answers' tested image, kept for new apps' seed job (above). Only main's: a release tags a main commit.
+      - name: Publish the smoke-tested image as new apps' seed (template main)
+        if: inputs.template && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          ANSWERS: ${{ inputs.answers }}
         run: |
           set -Eeuo pipefail
-          docker tag app:smoke "$SEED_IMAGE:seed-$GITHUB_SHA"
-          docker push --quiet "$SEED_IMAGE:seed-$GITHUB_SHA"
-          echo "Seed for new apps: \`$SEED_IMAGE:seed-$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          tag="$SEED_IMAGE:seed-$GITHUB_SHA-$(printf '%s' "$ANSWERS" | sed 's/[a-z]*=//g; s/ /-/g')"
+          docker tag app:smoke "$tag"
+          docker push --quiet "$tag"
+          echo "Seed for new apps: \`$tag\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prove retained export is the smoke-tested image
         if: steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true'
