@@ -1,4 +1,4 @@
-micronaut.application.name={{ app_name }}
+micronaut.application.name=${swhurl.app:{{ app_name }}}
 {%- if kind == 'web' %}
 micronaut.server.port=8080
 {%- endif %}

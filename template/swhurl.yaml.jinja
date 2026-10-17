@@ -5,6 +5,8 @@
 version: 1
 stack: kotlin
 kind: {{ kind }}
+# One line saying what the app does: the platform passes it to the app as SWHURL_DESCRIPTION
+description: {{ description | tojson }}
 
 # Needs: what the image needs to run
 {%- if kind == 'web' %}

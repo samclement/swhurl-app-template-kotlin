@@ -21,6 +21,9 @@ import java.security.PrivateKey
 import java.security.Signature
 import java.security.interfaces.RSAPublicKey
 import java.util.Base64
+{%- if api == 'openapi' %}
+import tools.jackson.dataformat.yaml.YAMLMapper
+{%- endif %}
 
 private const val ISSUER = "https://kubernetes.default.svc.cluster.local"
 
@@ -46,6 +49,7 @@ class HttpTest : TestPropertyProvider {
             "swhurl.auth.issuer" to ISSUER,
             "swhurl.auth.keys" to """{"keys":[{"kty":"RSA","alg":"RS256","kid":"k1","n":"$n","e":"$e"}]}""",
             "swhurl.allowed.callers" to "reports,billing",
+            "swhurl.description" to "Orders, kept for a year",
         )
     }
 
@@ -85,6 +89,10 @@ class HttpTest : TestPropertyProvider {
     fun `the API description is served`() {
         val served = client.toBlocking().retrieve("/openapi.yaml")
         assertTrue(served.startsWith("openapi: 3.") && served.contains("\n  /:\n"), served)
+        // Named and described as the platform runs it (SWHURL_APP, SWHURL_DESCRIPTION).
+        val info = YAMLMapper().readTree(served).get("info")
+        assertEquals("orders", info.get("title").asString())
+        assertEquals("Orders, kept for a year", info.get("description").asString())
     }
 
 {% endif %}
