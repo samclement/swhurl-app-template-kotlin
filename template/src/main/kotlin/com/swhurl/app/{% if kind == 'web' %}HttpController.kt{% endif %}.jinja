@@ -16,6 +16,9 @@ import io.swagger.v3.oas.annotations.Hidden
 import io.swagger.v3.oas.annotations.OpenAPIDefinition
 import io.swagger.v3.oas.annotations.Operation
 import io.swagger.v3.oas.annotations.info.Info
+import tools.jackson.databind.node.ObjectNode
+import tools.jackson.dataformat.yaml.YAMLMapper
+import tools.jackson.dataformat.yaml.YAMLWriteFeature
 {%- endif %}
 import io.opentelemetry.api.trace.Span
 import org.slf4j.LoggerFactory
@@ -86,6 +89,12 @@ class HttpController(
 {%- endif %}
 ) {
     private val log = LoggerFactory.getLogger(HttpController::class.java)
+{%- if api == 'openapi' %}
+    private val yaml = YAMLMapper.builder()
+        .disable(YAMLWriteFeature.WRITE_DOC_START_MARKER)
+        .enable(YAMLWriteFeature.MINIMIZE_QUOTES)
+        .build()
+{%- endif %}
 
     // The platform's readiness and liveness probe: the app answers only once started{% if database == 'sqlite' %} (the database
     // opens and migrates at startup){% endif %}, and reports not ready until its feature flag overrides have arrived
@@ -98,10 +107,22 @@ class HttpController(
         if (Flags.store.loaded) HttpResponse.ok(Health(true)) else HttpResponse.status<Health>(HttpStatus.SERVICE_UNAVAILABLE).body(Health(false))
 {%- if api == 'openapi' %}
 
-    // The description itself, as other apps and people fetch it.
+    // The description itself, as other apps and people fetch it: named and described as the platform runs
+    // this app (SWHURL_APP; SWHURL_DESCRIPTION, from swhurl.yaml), so an image built for another app says the
+    // right thing. Off the platform it is the file as committed.
     @Hidden
     @Get("/openapi.yaml", produces = ["application/yaml"])
-    fun openapi(): String = HttpController::class.java.getResource("/openapi.yaml")!!.readText()
+    fun openapi(): String {
+        val text = HttpController::class.java.getResource("/openapi.yaml")!!.readText()
+        val name = platform.setting("SWHURL_APP")
+        val description = platform.setting("SWHURL_DESCRIPTION")
+        if (name == null && description == null) return text
+        val document = yaml.readTree(text) as ObjectNode
+        val info = document.get("info") as ObjectNode
+        name?.let { info.put("title", it) }
+        description?.let { info.put("description", it) }
+        return yaml.writeValueAsString(document)
+    }
 {%- endif %}
 
     private fun caller(request: HttpRequest<*>): Caller =

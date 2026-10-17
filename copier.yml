@@ -17,6 +17,10 @@ description:
   type: str
   help: One line saying what the app does
   default: A swhurl app
+  validator: >-
+    {% if description | length > 200 or description != (description.split() | join(' ')) %}
+    must be one line of at most 200 characters, without leading, trailing or repeated spaces
+    {% endif %}
 
 kind:
   type: str
