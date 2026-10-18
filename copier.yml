@@ -33,15 +33,11 @@ kind:
 
 database:
   type: str
-  help: "sqlite: a database file the platform keeps on a volume, backed up nightly, with migrations at startup (not for a job: it has no running pod to back up from)"
+  help: "sqlite: a database file the platform keeps on a volume, backed up nightly, with migrations at startup (APIs; a worker or a job keeps what it needs in an API it calls)"
   choices:
     none: none
     sqlite: sqlite
-  default: none
-  validator: >-
-    {% if kind == 'job' and database == 'sqlite' %}
-    a job cannot keep a database: store what it needs in an API it calls
-    {% endif %}
+  default: "{{ 'sqlite' if kind == 'web' else 'none' }}"
 
 api:
   type: str
@@ -49,20 +45,13 @@ api:
   choices:
     none: none
     openapi: openapi
-  default: none
-
-events:
-  type: str
-  help: "asyncapi: describes the events the app publishes in asyncapi.yaml, so other apps can find and subscribe to them"
-  choices:
-    none: none
-    asyncapi: asyncapi
-  default: none
-
-flags:
-  type: str
-  help: "example: declares one feature flag in swhurl.yaml (shout, on in staging only) and reads it in the example code; every app can declare flags"
-  choices:
-    none: none
-    example: example
-  default: none
+  default: "{{ 'openapi' if kind == 'web' else 'none' }}"
+  # The last question: the answers together must be one of the platform's app types
+  # (swhurl-platform tools/swhurl/apps/contract.py APP_TYPES), the only sets this template's CI builds.
+  # A type whose answers change keeps its old set here until no app records it.
+  validator: >-
+    {% set answers = [kind, database, api] | join(' ') %}
+    {% if answers not in ['web sqlite openapi', 'worker none none', 'job none none'] %}
+    kind={{ kind }} database={{ database }} api={{ api }} is not an app type: api (web sqlite openapi),
+    worker (worker none none) or scheduled-job (job none none)
+    {% endif %}

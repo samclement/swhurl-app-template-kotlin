@@ -23,11 +23,8 @@ resources:
   cpu: 100m
   memory: 192Mi
   memoryLimit: 384Mi
-{%- if kind == 'web' and api == 'openapi' or events == 'asyncapi' or flags == 'example' %}
 
 # Offers: what other apps can use
-{%- endif %}
-{%- if kind == 'web' and api == 'openapi' or events == 'asyncapi' %}
 # Its API description (served, and kept in the repository) and its events. The platform reads both
 # files for every image; the events file says what the app publishes.
 provides:
@@ -35,11 +32,7 @@ provides:
   api: /openapi.yaml
   apiFile: src/main/resources/openapi.yaml
 {%- endif %}
-{%- if events == 'asyncapi' %}
   eventsFile: src/main/resources/asyncapi.yaml
-{%- endif %}
-{%- endif %}
-{%- if flags == 'example' %}
 # Feature flags: typed, with a value per environment; the build generates the Flags object from them.
 # https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#feature-flags
 flags:
@@ -53,7 +46,6 @@ flags:
     type: boolean
     description: Make the example run fail, to see a failed run reported
     default: false
-{%- endif %}
 {%- endif %}
 
 # Grants are set on the platform, not here: the team, who can reach the app, the apps it calls, the

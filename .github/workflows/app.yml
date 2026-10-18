@@ -18,7 +18,7 @@ on:
         type: boolean
         default: false
       answers:
-        description: "With template: Copier answers, space-separated key=value (for example kind=worker database=sqlite)"
+        description: "With template: Copier answers, space-separated key=value (for example kind=worker database=none api=none)"
         type: string
         default: ''
 
@@ -32,9 +32,9 @@ on:
 
 env:
   # The template's own CI publishes the image it built and smoke-tested for each set of answers in its
-  # Template workflow as seed-<commit>-<kind>-<database>-<api>-<events>-<flags> (the values in that
-  # order); a new app's first run copies the one for its own answers (the seed job). The platform's app
-  # types are among those sets. The image does not depend on the app's name: the platform gives it its
+  # Template workflow as seed-<commit>-<kind>-<database>-<api> (the values in that order); a new app's first run
+  # copies the one for its own answers (the seed job). Those sets are the platform's app types, the only
+  # answers the template accepts. The image does not depend on the app's name: the platform gives it its
   # name and description at runtime.
   SEED_IMAGE: ghcr.io/samclement/swhurl-app-template-kotlin
 
@@ -42,8 +42,8 @@ jobs:
   # A new app's first run: copy the template's image for the same answers and revision, already built
   # and smoke-tested by the template's own CI on main, to this app's 0-<sha>. The platform can then
   # deploy the app at once; this run's own build publishes <run>-<sha>, which image automation deploys
-  # next (1 sorts above 0). Answers the template's CI does not build, or no seed for that revision: the build is the
-  # first image as before. It never fails the run.
+  # next (1 sorts above 0). No seed for that revision (older than 30 days, or answers from before the
+  # types): the build is the first image. It never fails the run.
   seed:
     name: Seed the first image
     if: ${{ !inputs.template && github.event_name == 'push' && github.run_number == 1 }}
@@ -59,11 +59,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -uo pipefail
-          answers=$(for question in kind database api events flags; do
+          answers=$(for question in kind database api; do
             printf '%s=%s ' "$question" "$(sed -n "s/^$question: *//p" .copier-answers.yml | head -1)"
           done)
           answers=${answers% }
-          slug=$(printf '%s' "$answers" | sed 's/[a-z]*=//g; s/ /-/g')   # web-sqlite-openapi-asyncapi-example
+          slug=$(printf '%s' "$answers" | sed 's/[a-z]*=//g; s/ /-/g')   # web-sqlite-openapi
           ref=$(sed -n 's/^_commit: *//p' .copier-answers.yml | head -1)
           case "$ref" in *-g*) ref=${ref##*-g} ;; esac   # git describe: v0.2.11-3-g1a2b3c4
           if ! sha=$(gh api "repos/samclement/swhurl-app-template-kotlin/commits/$ref" --jq .sha); then
@@ -90,7 +90,7 @@ jobs:
           if docker buildx imagetools create --tag "$target" "$SOURCE"; then
             echo "Seeded \`$target\` from \`$SOURCE\`; this run's build publishes the app's own image next." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "No seed: \`$SOURCE\` is not published (the template's CI builds only some answers, and keeps 30 days of seeds); this run's build is the first image." >> "$GITHUB_STEP_SUMMARY"
+            echo "No seed: \`$SOURCE\` is not published (the template's CI keeps 30 days of seeds, for the app types' answers); this run's build is the first image." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   build:
@@ -99,7 +99,7 @@ jobs:
     env:
       APP_DIR: ${{ inputs.template && 'app' || '.' }}
       PUBLISH: ${{ !inputs.template && github.event_name != 'pull_request' }}
-      CHECK_EXPORT: ${{ inputs.template && inputs.answers == 'kind=web database=none api=none events=none flags=none' }}  # the Template workflow's first matrix entry, exactly
+      CHECK_EXPORT: ${{ inputs.template && inputs.answers == 'kind=web database=sqlite api=openapi' }}  # the Template workflow's first matrix entry, exactly
       REUSE_ENABLED: ${{ !inputs.template && inputs.reuse-pr-image && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
     defaults:
       run:
