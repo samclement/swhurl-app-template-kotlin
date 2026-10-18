@@ -6,6 +6,8 @@ A Kotlin ([Micronaut](https://micronaut.io/)) app on the [swhurl platform](https
 
 {% if kind == 'web' -%}
 An HTTP service: `HttpController.kt` answers on port 8080; the platform probes `GET /healthz`.
+{%- elif kind == 'job' -%}
+A scheduled job with no web address: the platform starts it on its schedule (daily at 03:17 UTC until changed with `make app-schedule` or the app page), and each run calls `work()` in `Job.kt` once, then ends. A run that throws ends with status 1: the platform shows the app as failing and tells its team, and the next scheduled run starts as usual. Runs never overlap, and a failed run is not retried. Locally, `./gradlew run` is one run.
 {%- else -%}
 A background worker with no web address: `Worker.kt` runs `work()` every `WORK_INTERVAL_MS` (default a minute).
 {%- endif %}
@@ -52,7 +54,7 @@ flags:
   new-checkout: {type: boolean, description: Use the new checkout flow, default: false, staging: true}
 ```
 
-Before every compile, `./gradlew flags` (`gradle/flags.gradle.kts`) checks the declarations and generates the `Flags` object under `build/generated/flags`: `if (Flags.newCheckout)`. On the platform an override set from the console wins: the app watches its own overrides over NATS (`FlagWatcher.kt`) and the next read returns the new value, without a restart. Otherwise a flag is the value declared for `SWHURL_ENV`, else its default, which is also what local runs get. A restart keeps the override; `/healthz` reports not ready until the stored overrides arrive (at most 5 s). Types: `boolean`, `integer` (`Int`), `number` (`Double`; both with optional `min` and `max`) and `string` (with an optional `enum`). To remove a flag, delete it from `swhurl.yaml`: the compiler then names each place that still reads it.{% if flags == 'example' %} `shout`, read in {% if kind == 'web' %}`HttpController.kt`{% else %}`Worker.kt`{% endif %}, is an example to replace.{% endif %}
+Before every compile, `./gradlew flags` (`gradle/flags.gradle.kts`) checks the declarations and generates the `Flags` object under `build/generated/flags`: `if (Flags.newCheckout)`. On the platform an override set from the console wins: the app watches its own overrides over NATS (`FlagWatcher.kt`) and the next read returns the new value, without a restart. Otherwise a flag is the value declared for `SWHURL_ENV`, else its default, which is also what local runs get. A restart keeps the override; `/healthz` reports not ready until the stored overrides arrive (at most 5 s). Types: `boolean`, `integer` (`Int`), `number` (`Double`; both with optional `min` and `max`) and `string` (with an optional `enum`). To remove a flag, delete it from `swhurl.yaml`: the compiler then names each place that still reads it.{% if flags == 'example' %} `shout`, read in {% if kind == 'web' %}`HttpController.kt`{% elif kind == 'job' %}`Job.kt`{% else %}`Worker.kt`{% endif %}, is an example to replace{% if kind == 'job' %}, and so is `fail-run`: turn it on for an environment on the app page to see how a failed run is reported{% endif %}.{% endif %}
 
 ## Events
 
@@ -65,7 +67,7 @@ events:
 
 What it receives is a grant, set on the platform: tick `orders.created` under **Connections** when creating the app, or later use the app page's **Connect to an app** or `make app-events ARGS="--add-subscribe orders.created"`.
 
-Then `events.publish("created", mapOf("id" to 42))` and `events.subscribe("orders.created") { event -> ... }`. An event is a CloudEvents envelope (`event.data` is what was published); a handler runs inside the publisher's trace, and if it throws the event comes back, five tries in all. `subscribe` keeps trying until it is receiving, since a new app can start before NATS knows it. {% if events == 'asyncapi' %}{% if kind == 'web' %}`HttpController.kt` publishes `visited` on every request to `/`{% else %}`Worker.kt` publishes `worked` after every run and logs every event it subscribes to{% endif %}{% elif kind == 'web' %}`HttpController.kt` publishes the first declared event on every request to `/`{% else %}`Worker.kt` logs every event it subscribes to{% endif %}: an example to replace. Locally there is no NATS: `publish` returns `null` and `subscribe` never calls back.
+Then `events.publish("created", mapOf("id" to 42))` and `events.subscribe("orders.created") { event -> ... }`. An event is a CloudEvents envelope (`event.data` is what was published); a handler runs inside the publisher's trace, and if it throws the event comes back, five tries in all. `subscribe` keeps trying until it is receiving, since a new app can start before NATS knows it. {% if events == 'asyncapi' %}{% if kind == 'web' %}`HttpController.kt` publishes `visited` on every request to `/`{% elif kind == 'job' %}`Job.kt` publishes `worked` in every run{% else %}`Worker.kt` publishes `worked` after every run and logs every event it subscribes to{% endif %}{% elif kind == 'web' %}`HttpController.kt` publishes the first declared event on every request to `/`{% else %}`Worker.kt` logs every event it subscribes to{% endif %}: an example to replace. Locally there is no NATS: `publish` returns `null` and `subscribe` never calls back.
 
 {% if events == 'asyncapi' -%}
 ### The events this app offers: `asyncapi.yaml`

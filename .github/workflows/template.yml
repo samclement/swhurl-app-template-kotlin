@@ -33,6 +33,8 @@ jobs:
           - kind=worker database=sqlite api=none events=asyncapi flags=example
           # The platform's app types (swhurl-platform contract.APP_TYPES) not already above: each is a seed.
           - kind=worker database=none api=none events=asyncapi flags=example
+          - kind=job database=none api=none events=none flags=none
+          - kind=job database=none api=none events=asyncapi flags=example
     uses: ./.github/workflows/app.yml
     with:
       template: true

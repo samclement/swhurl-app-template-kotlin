@@ -24,19 +24,24 @@ description:
 
 kind:
   type: str
-  help: "web: an HTTP service with a health endpoint; worker: a background process with no web address"
+  help: "web: an HTTP service with a health endpoint; worker: a background process with no web address; job: a run on a schedule that does its work and exits"
   choices:
     web: web
     worker: worker
+    job: job
   default: web
 
 database:
   type: str
-  help: "sqlite: a database file the platform keeps on a volume, backed up nightly, with migrations at startup"
+  help: "sqlite: a database file the platform keeps on a volume, backed up nightly, with migrations at startup (not for a job: it has no running pod to back up from)"
   choices:
     none: none
     sqlite: sqlite
   default: none
+  validator: >-
+    {% if kind == 'job' and database == 'sqlite' %}
+    a job cannot keep a database: store what it needs in an API it calls
+    {% endif %}
 
 api:
   type: str

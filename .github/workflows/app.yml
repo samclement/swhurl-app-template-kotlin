@@ -256,6 +256,13 @@ jobs:
           if [ "$kind" = web ]; then args+=(-p "18080:$port"); fi
           docker run -d --name smoke "${args[@]}" app:smoke
           SECONDS=0
+          if [ "$kind" = job ]; then
+            # A job runs once and ends: it must end, with status 0, within the same 120 s allowance.
+            code=$(timeout 120 docker wait smoke) || { echo "the job did not end within 120 s"; docker logs smoke; exit 1; }
+            docker logs smoke
+            [ "$code" = 0 ] || { echo "the job ended with status $code"; exit 1; }
+            echo "the job ended with status 0 after ${SECONDS} s"
+          fi
           if [ "$kind" = web ]; then
             path=$(field healthPath); path=${path:-/healthz}
             # Up to 120 s: the start-up allowance the platform gives every web app (its startup probe).
@@ -267,7 +274,7 @@ jobs:
             curl -fsS "http://127.0.0.1:18080$path" >/dev/null || { docker logs smoke; exit 1; }
             curl -fsS http://127.0.0.1:18080/ >/dev/null || { docker logs smoke; exit 1; }
           fi
-          stays_running || { docker logs smoke; exit 1; }
+          [ "$kind" = job ] || stays_running || { docker logs smoke; exit 1; }
           if [ "$database" = sqlite ]; then
             docker stop smoke
             python3 - "$data_dir/app.db" "$data_dir/before.json" <<'PYSQL'

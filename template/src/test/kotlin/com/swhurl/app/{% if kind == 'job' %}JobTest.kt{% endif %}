@@ -1,0 +1,20 @@
+package com.swhurl.app
+
+import io.micronaut.test.extensions.junit5.annotation.MicronautTest
+import jakarta.inject.Inject
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
+
+// One run's status: 0 when the work succeeds, 1 when it throws (a failed run).
+@MicronautTest(startApplication = false)
+class JobTest {
+    @Inject
+    lateinit var job: Job
+
+    @Test
+    fun `a run that works is status 0, one that throws is status 1`() {
+        assertEquals(0, job.run())
+        assertEquals(0, job.run {})
+        assertEquals(1, job.run { error("broken on purpose") })
+    }
+}
