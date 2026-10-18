@@ -54,11 +54,11 @@ flags:
   new-checkout: {type: boolean, description: Use the new checkout flow, default: false, staging: true}
 ```
 
-Before every compile, `./gradlew flags` (`gradle/flags.gradle.kts`) checks the declarations and generates the `Flags` object under `build/generated/flags`: `if (Flags.newCheckout)`. On the platform an override set from the console wins: the app watches its own overrides over NATS (`FlagWatcher.kt`) and the next read returns the new value, without a restart. Otherwise a flag is the value declared for `SWHURL_ENV`, else its default, which is also what local runs get. A restart keeps the override; `/healthz` reports not ready until the stored overrides arrive (at most 5 s). Types: `boolean`, `integer` (`Int`), `number` (`Double`; both with optional `min` and `max`) and `string` (with an optional `enum`). To remove a flag, delete it from `swhurl.yaml`: the compiler then names each place that still reads it.{% if flags == 'example' %} `shout`, read in {% if kind == 'web' %}`HttpController.kt`{% elif kind == 'job' %}`Job.kt`{% else %}`Worker.kt`{% endif %}, is an example to replace{% if kind == 'job' %}, and so is `fail-run`: turn it on for an environment on the app page to see how a failed run is reported{% endif %}.{% endif %}
+Before every compile, `./gradlew flags` (`gradle/flags.gradle.kts`) checks the declarations and generates the `Flags` object under `build/generated/flags`: `if (Flags.newCheckout)`. On the platform an override set from the console wins: the app watches its own overrides over NATS (`FlagWatcher.kt`) and the next read returns the new value, without a restart. Otherwise a flag is the value declared for `SWHURL_ENV`, else its default, which is also what local runs get. A restart keeps the override; `/healthz` reports not ready until the stored overrides arrive (at most 5 s). Types: `boolean`, `integer` (`Int`), `number` (`Double`; both with optional `min` and `max`) and `string` (with an optional `enum`). To remove a flag, delete it from `swhurl.yaml`: the compiler then names each place that still reads it. `shout`, read in {% if kind == 'web' %}`HttpController.kt`{% elif kind == 'job' %}`Job.kt`{% else %}`Worker.kt`{% endif %}, is an example to replace{% if kind == 'job' %}, and so is `fail-run`: turn it on for an environment on the app page to see how a failed run is reported{% endif %}.
 
 ## Events
 
-`Events.kt` publishes and receives events on the platform's NATS ([events](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#events)). What it publishes is an offer: declare it in `swhurl.yaml` before the app is created (afterwards: `make app-events` on the platform){% if events == 'asyncapi' %}, or, as this app does, in `src/main/resources/asyncapi.yaml`{% endif %}:
+`Events.kt` publishes and receives events on the platform's NATS ([events](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#events)). What it publishes is an offer: declare it in `swhurl.yaml` before the app is created (afterwards: `make app-events` on the platform), or, as this app does, in `src/main/resources/asyncapi.yaml`:
 
 ```yaml
 events:
@@ -67,16 +67,14 @@ events:
 
 What it receives is a grant, set on the platform: tick `orders.created` under **Connections** when creating the app, or later use the app page's **Connect to an app** or `make app-events ARGS="--add-subscribe orders.created"`.
 
-Then `events.publish("created", mapOf("id" to 42))` and `events.subscribe("orders.created") { event -> ... }`. An event is a CloudEvents envelope (`event.data` is what was published); a handler runs inside the publisher's trace, and if it throws the event comes back, five tries in all. `subscribe` keeps trying until it is receiving, since a new app can start before NATS knows it. {% if events == 'asyncapi' %}{% if kind == 'web' %}`HttpController.kt` publishes `visited` on every request to `/`{% elif kind == 'job' %}`Job.kt` publishes `worked` in every run{% else %}`Worker.kt` publishes `worked` after every run and logs every event it subscribes to{% endif %}{% elif kind == 'web' %}`HttpController.kt` publishes the first declared event on every request to `/`{% else %}`Worker.kt` logs every event it subscribes to{% endif %}: an example to replace. Locally there is no NATS: `publish` returns `null` and `subscribe` never calls back.
+Then `events.publish("created", mapOf("id" to 42))` and `events.subscribe("orders.created") { event -> ... }`. An event is a CloudEvents envelope (`event.data` is what was published); a handler runs inside the publisher's trace, and if it throws the event comes back, five tries in all. `subscribe` keeps trying until it is receiving, since a new app can start before NATS knows it. {% if kind == 'web' %}`HttpController.kt` publishes `visited` on every request to `/`{% elif kind == 'job' %}`Job.kt` publishes `worked` in every run{% else %}`Worker.kt` publishes `worked` after every run and logs every event it subscribes to{% endif %}: an example to replace. Locally there is no NATS: `publish` returns `null` and `subscribe` never calls back.
 
-{% if events == 'asyncapi' -%}
 ### The events this app offers: `asyncapi.yaml`
 
 [`src/main/resources/asyncapi.yaml`](src/main/resources/asyncapi.yaml) describes each event {{ app_name }} publishes ([AsyncAPI 3](https://www.asyncapi.com/docs)): its name, what it means, the schema of its payload and an example. It is the declaration. The platform reads it to show other apps what they can subscribe to, and `events.publish()` throws `EventInvalid` for an event that is not in it or a payload that does not fit, locally as well as on the platform.
 
 To add an event, add to `asyncapi.yaml` a channel (its `address` is the event's name), a message with a `payload` schema and an example, and a `send` operation; then call `events.publish("<name>", data)`. `AsyncApiTest` checks that every event has a description, a schema and an example that fits it. Nothing else is declared: after the push, the platform reads the file for the new image and other apps can subscribe ([what an app offers](https://github.com/samclement/swhurl-platform/blob/main/docs/apps.md#what-an-app-offers)).
 
-{% endif -%}
 {% if kind == 'web' and api == 'openapi' -%}
 ## The API this app offers: `openapi.yaml`
 

@@ -16,6 +16,6 @@ permissions:
 
 jobs:
   app:
-    uses: samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v0.2.16
+    uses: samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v0.2.17
     with:
       reuse-pr-image: true

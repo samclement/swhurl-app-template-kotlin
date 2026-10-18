@@ -24,10 +24,10 @@ class AsyncApiTest {
     private fun settled(node: JsonNode) = if (node.has("\$ref")) doc.at(text(node.get("\$ref")).removePrefix("#")) else node
 
     @Test
-    fun `it is an AsyncAPI 3 document that sends at least one event`() {
+    fun `it is an AsyncAPI 3 document`() {
+        // An app that publishes nothing keeps the file with no channels.
         assertTrue(text(doc.get("asyncapi")).startsWith("3."))
         assertTrue(text(doc.path("info").get("title")).isNotEmpty())
-        assertTrue(events.described!!.isNotEmpty(), "asyncapi.yaml sends no event")
     }
 
     @Test
@@ -50,7 +50,8 @@ class AsyncApiTest {
     @Test
     fun `an event that is not described, or a payload that does not fit, is refused`() {
         assertThrows(EventInvalid::class.java) { events.publish("not-described", mapOf()) }
-        val refused = assertThrows(EventInvalid::class.java) { events.publish(events.described!!.keys.first(), mapOf("unexpected" to true)) }
+        val event = events.described!!.keys.firstOrNull() ?: return // publishes nothing
+        val refused = assertThrows(EventInvalid::class.java) { events.publish(event, mapOf("unexpected" to true)) }
         assertTrue(refused.message!!.contains("does not fit its schema in asyncapi.yaml"), refused.message)
         assertEquals(EventInvalid::class.java, refused.javaClass)
     }

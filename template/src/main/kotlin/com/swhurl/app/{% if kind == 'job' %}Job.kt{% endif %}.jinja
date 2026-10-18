@@ -18,21 +18,13 @@ class Job(
 
     /** The job itself: throw to fail the run. */
     fun work() {
-{%- if flags == 'example' %}
         // An example of a feature flag: fail-run is declared in swhurl.yaml, off everywhere. Turn it on
         // for an environment on the app page to see a failed run reported; turn it off again afterwards.
         check(!Flags.failRun) { "fail-run is on: this run fails on purpose" }
-{%- endif %}
-{%- if events == 'asyncapi' %}
         // An example of publishing: "worked" is described in asyncapi.yaml, which is what lets other
         // apps find it and subscribe. Off the platform the payload is still checked, and nothing is sent.
         events.publish("worked", mapOf("at" to java.time.Instant.now().toString()))
-{%- endif %}
-{%- if flags == 'example' %}
         log.info(if (Flags.shout) "WORK DONE" else "work done")
-{%- else %}
-        log.info("work done")
-{%- endif %}
     }
 
     /** One run: wait for the feature flag overrides (at most 5 s), then do ``job`` once inside a root span
