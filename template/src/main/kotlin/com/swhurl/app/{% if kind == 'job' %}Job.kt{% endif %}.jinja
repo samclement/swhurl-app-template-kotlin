@@ -1,0 +1,60 @@
+package com.swhurl.app
+
+import io.micronaut.context.annotation.Value
+import io.opentelemetry.api.GlobalOpenTelemetry
+import io.opentelemetry.api.trace.StatusCode
+import jakarta.inject.Singleton
+import org.slf4j.LoggerFactory
+
+// A scheduled job: no web address. The platform runs it on its schedule (make app-schedule, or the app
+// page): each run does its work once, then ends. Exit status 0 is a successful run, anything else a
+// failed one, which the platform reports to the team. Replace work() with the app's job.
+@Singleton
+class Job(
+    @Value("\${otel.service.name:swhurl-app}") private val serviceName: String,
+    private val events: Events,
+) {
+    private val log = LoggerFactory.getLogger(Job::class.java)
+
+    /** The job itself: throw to fail the run. */
+    fun work() {
+{%- if flags == 'example' %}
+        // An example of a feature flag: fail-run is declared in swhurl.yaml, off everywhere. Turn it on
+        // for an environment on the app page to see a failed run reported; turn it off again afterwards.
+        check(!Flags.failRun) { "fail-run is on: this run fails on purpose" }
+{%- endif %}
+{%- if events == 'asyncapi' %}
+        // An example of publishing: "worked" is described in asyncapi.yaml, which is what lets other
+        // apps find it and subscribe. Off the platform the payload is still checked, and nothing is sent.
+        events.publish("worked", mapOf("at" to java.time.Instant.now().toString()))
+{%- endif %}
+{%- if flags == 'example' %}
+        log.info(if (Flags.shout) "WORK DONE" else "work done")
+{%- else %}
+        log.info("work done")
+{%- endif %}
+    }
+
+    /** One run: wait for the feature flag overrides (at most 5 s), then do ``job`` once inside a root span
+     * "run". Returns the exit status the process should end with, 0 or 1. */
+    fun run(job: () -> Unit = ::work): Int {
+        val waitUntil = System.currentTimeMillis() + 5_000
+        while (!Flags.store.loaded && System.currentTimeMillis() < waitUntil) Thread.sleep(100)
+        val started = System.currentTimeMillis()
+        val span = GlobalOpenTelemetry.getTracer(serviceName).spanBuilder("run").startSpan()
+        return span.makeCurrent().use {
+            try {
+                job()
+                log.info("run succeeded in ${System.currentTimeMillis() - started} ms")
+                0
+            } catch (problem: Exception) {
+                span.recordException(problem)
+                span.setStatus(StatusCode.ERROR, problem.message ?: problem.javaClass.simpleName)
+                log.error("run failed in ${System.currentTimeMillis() - started} ms: ${problem.message}", problem)
+                1
+            } finally {
+                span.end()
+            }
+        }
+    }
+}

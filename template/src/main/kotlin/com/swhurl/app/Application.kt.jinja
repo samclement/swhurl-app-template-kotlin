@@ -7,6 +7,14 @@ import io.micronaut.runtime.Micronaut
 fun main(args: Array<String>) {
     Micronaut.build(*args).banner(false).start()
 }
+{%- elif kind == 'job' -%}
+// One run of a scheduled job (Job.kt): start the application context (its feature flag watcher and
+// events connection), run once, close the context and exit with the run's status. The OpenTelemetry
+// agent sends what the run recorded on the way out (a JVM shutdown hook).
+fun main(args: Array<String>) {
+    val status = Micronaut.build(*args).banner(false).start().use { context -> context.getBean(Job::class.java).run() }
+    kotlin.system.exitProcess(status)
+}
 {%- else -%}
 // A background worker with no HTTP server (Worker.kt). Starts the application context, whose scheduled
 // work then runs, and waits; on SIGTERM Micronaut's shutdown hook closes the context.
