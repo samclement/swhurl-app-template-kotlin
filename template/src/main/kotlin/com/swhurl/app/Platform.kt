@@ -55,6 +55,23 @@ class Platform(private val environment: Environment, private val json: JsonMappe
         return value?.takeIf { it.isNotBlank() }
     }
 
+    // The platform's verification facts reach this pod twice: as environment variables, which a running pod never
+    // re-reads, and as files under /var/run/swhurl, which the kubelet refreshes in place. The file wins when the
+    // platform sets <variable>_FILE, even when it is empty, so a rotated key, a newly allowed caller or a removed
+    // one takes effect without a restart; the variable stays the fallback for an image running outside the platform
+    // or against an older renderer. The reads are three small files on the token path only, and the OS page cache
+    // makes them cheap.
+    private fun material(variable: String): String? {
+        val file = setting("${variable}_FILE")?.let { path ->
+            try {
+                Files.readString(Path.of(path)).trim()
+            } catch (problem: Exception) {
+                null
+            }
+        }
+        return (file ?: setting(variable))?.takeIf { it.isNotBlank() }
+    }
+
     /**
      * Who sent this request. A request with a bearer token must carry a good one (Unauthorized
      * otherwise), and is an app; with the token, `user` (the X-Swhurl-User header) names the person
@@ -87,9 +104,9 @@ class Platform(private val environment: Environment, private val json: JsonMappe
     private fun appCaller(token: String, user: String?): Caller {
         val app = setting("SWHURL_APP")
         val env = setting("SWHURL_ENV")
-        val issuer = setting("SWHURL_AUTH_ISSUER")
+        val issuer = material("SWHURL_AUTH_ISSUER")
         // Outside the platform (local development) there are no keys to check a token against.
-        val keys = setting("SWHURL_AUTH_KEYS")
+        val keys = material("SWHURL_AUTH_KEYS")
             ?: throw Unauthorized("this app is not configured to verify tokens (SWHURL_AUTH_KEYS is not set)")
         if (app == null || env == null || issuer == null) {
             throw Unauthorized("this app is not configured to verify tokens (SWHURL_AUTH_KEYS is not set)")
@@ -135,7 +152,7 @@ class Platform(private val environment: Environment, private val json: JsonMappe
         if (caller == null || subject.groupValues[1] != "$caller-$env") {
             throw Unauthorized("token is not from an app in this environment")
         }
-        val allowed = (setting("SWHURL_ALLOWED_CALLERS") ?: "").split(",").filter { it.isNotEmpty() }
+        val allowed = (material("SWHURL_ALLOWED_CALLERS") ?: "").split(",").filter { it.isNotEmpty() }
         if (caller !in allowed) throw Unauthorized("$caller is not allowed to call $app")
         // An allowed caller is trusted to name the person truthfully, as it is trusted with its own token.
         if (user.isNullOrEmpty()) return Caller("app", caller)
