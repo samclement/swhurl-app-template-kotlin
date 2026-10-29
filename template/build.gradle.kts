@@ -56,7 +56,7 @@ dependencies {
         compileOnly("io.micronaut.openapi:micronaut-openapi-annotations")
     }
     if (database == "sqlite") {
-        implementation("org.xerial:sqlite-jdbc:3.53.4.0")
+        implementation("org.xerial:sqlite-jdbc:3.54.1.0")
     }
     otelAgent("io.opentelemetry.javaagent:opentelemetry-javaagent:2.33.1")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
