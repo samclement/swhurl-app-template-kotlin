@@ -237,7 +237,9 @@ jobs:
           load: ${{ !(steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true') }}
           provenance: ${{ (steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true') && 'mode=max' || '' }}
           outputs: ${{ (steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true') && format('type=oci,dest={0}/swhurl-image/image.oci.tar', runner.temp) || '' }}
-          labels: ${{ steps.declaration.outputs.labels }}
+          labels: |
+            ${{ steps.declaration.outputs.labels }}
+            org.opencontainers.image.revision=${{ github.sha }}
           tags: app:smoke
           cache-to: ${{ steps.meta.outputs.cache-to }}
           cache-from: ${{ steps.meta.outputs.cache-from }}
@@ -347,7 +349,9 @@ jobs:
           set -Eeuo pipefail
           labels=$(docker inspect --format '{{json .Config.Labels}}' app:smoke)
           declared=$(python3 -c 'import json, sys; print(json.loads(sys.argv[1]).get("platform.swhurl.com/declaration", ""))' "$labels")
+          revision=$(python3 -c 'import json, sys; print(json.loads(sys.argv[1]).get("org.opencontainers.image.revision", ""))' "$labels")
           test -n "$declared" || { echo "the image states no declaration" >&2; exit 1; }
+          test "$revision" = "$GITHUB_SHA" || { echo "the image states revision '$revision', not this build's $GITHUB_SHA" >&2; exit 1; }
           test "platform.swhurl.com/declaration=$declared" = "$SOURCE_LABEL" ||
             { echo "the image's declaration is not the source's: $declared" >&2; exit 1; }
           python3 - "$declared" "$ANSWERS" <<'PY'
@@ -424,7 +428,9 @@ jobs:
           target: ${{ env.REUSE_ENABLED == 'true' && 'runtime' || '' }}
           platforms: linux/amd64
           push: true
-          labels: ${{ steps.declaration.outputs.labels }}
+          labels: |
+            ${{ steps.declaration.outputs.labels }}
+            org.opencontainers.image.revision=${{ github.sha }}
           tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
           cache-from: ${{ steps.meta.outputs.cache-from }}
 
