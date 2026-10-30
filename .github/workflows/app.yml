@@ -117,7 +117,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: samclement/swhurl-platform
-          ref: dfb7cfe7dd25f5b1fe7e5d680ee499ad7edbc73f
+          ref: 1d51e4ee349e7e9354da5a32b394866cbb8d1279
           path: .swhurl-platform
           sparse-checkout: tools
           persist-credentials: false
