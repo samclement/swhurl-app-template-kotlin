@@ -5,7 +5,10 @@ name: App
 # samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v…; Renovate updates each released pin (like renovate-preset.json). The image build runs Gradle checks and packages
 # the app in one invocation, then smoke-tests it (it starts, answers /healthz and keeps running).
 # Pushes to main then push the image to GHCR tagged <run number>-<short sha> (for example 42-a1b2c3d); the platform's image
-# automation deploys the highest run number to staging, and the job summary prints image@digest.
+# automation deploys the highest run number to staging, and the job summary prints image@digest. Every image
+# also states what it needs in one config label (platform.swhurl.com/declaration), from swhurl.yaml and the
+# events document it names; v2's image automation reads it with the manifest, and the template's own CI
+# asserts it for every app type.
 # The template's own Template workflow calls it with template: true: it renders the template with
 # Copier into ./app (as the platform's make app-repo does), checks and smoke-tests that, and publishes
 # nothing.
@@ -108,18 +111,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Checkout image reuse helper
-        if: env.REUSE_ENABLED == 'true' || env.CHECK_EXPORT == 'true'
+      # The platform's own commands: the label an image states about itself (every build) and the tested PR
+      # image an app may reuse. Pinned, so changing either is a template change.
+      - name: Checkout the platform's helper commands
         uses: actions/checkout@v7
         with:
           repository: samclement/swhurl-platform
-          ref: bd20f00205457e0278e2558d6777454fdeac4025
+          ref: dfb7cfe7dd25f5b1fe7e5d680ee499ad7edbc73f
           path: .swhurl-platform
           sparse-checkout: tools
           persist-credentials: false
 
       - name: Keep helper and image exports outside the app context
-        if: env.REUSE_ENABLED == 'true' || env.CHECK_EXPORT == 'true'
         working-directory: .
         run: |
           mv .swhurl-platform "$RUNNER_TEMP/swhurl-platform"
@@ -136,8 +139,7 @@ jobs:
           python3 -m swhurl app-build-image prepare --state "$RUNNER_TEMP/swhurl-image/state.json" \
             --recipe samclement/swhurl-app-template-kotlin@v0.2.5 --target runtime
 
-      - name: Setup uv (template only)
-        if: inputs.template
+      - name: Setup uv
         uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: false
@@ -153,6 +155,19 @@ jobs:
           uvx copier@9.18.2 copy --defaults --vcs-ref HEAD --data app_name=smoke-app "${data[@]}" . app
           test -f app/.copier-answers.yml && test -f app/swhurl.yaml && grep -q '^# smoke-app$' app/README.md
           cat app/swhurl.yaml
+
+      # What this image needs, for the platform's image automation: one config label from swhurl.yaml and the
+      # events document it names, by the platform's own reader (checked out above). Both builds below carry
+      # it, because a PR's tested image is published unchanged when main merges and the seed is this image.
+      - name: What the image states
+        id: declaration
+        env:
+          PYTHONPATH: ${ runner.temp }/swhurl-platform/tools
+        run: |
+          set -Eeuo pipefail
+          label=$(uv run --no-project --with PyYAML==6.0.3 -- python -m swhurl image-declaration --app-dir .)
+          echo "labels=$label" >> "$GITHUB_OUTPUT"
+          echo "- declaration: \`$label\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Image name and tag
         id: meta
@@ -222,6 +237,7 @@ jobs:
           load: ${{ !(steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true') }}
           provenance: ${{ (steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true') && 'mode=max' || '' }}
           outputs: ${{ (steps.candidate.outputs.retain == 'true' || env.CHECK_EXPORT == 'true') && format('type=oci,dest={0}/swhurl-image/image.oci.tar', runner.temp) || '' }}
+          labels: ${{ steps.declaration.outputs.labels }}
           tags: app:smoke
           cache-to: ${{ steps.meta.outputs.cache-to }}
           cache-from: ${{ steps.meta.outputs.cache-from }}
@@ -319,6 +335,41 @@ jobs:
           fi
           echo "smoke test passed ($kind${database:+, $database})"
 
+      # Every app type asserts what its image states, before the seed publishes it: the label is on the image
+      # the smoke test ran, it is the document the source makes, and it says what the answers say. The job type
+      # states `job`, which v2 refuses: a job image is not an instance.
+      - name: The image states its declaration (template only)
+        if: inputs.template
+        env:
+          ANSWERS: ${{ inputs.answers }}
+          SOURCE_LABEL: ${{ steps.declaration.outputs.labels }}
+        run: |
+          set -Eeuo pipefail
+          labels=$(docker inspect --format '{{json .Config.Labels}}' app:smoke)
+          declared=$(python3 -c 'import json, sys; print(json.loads(sys.argv[1]).get("platform.swhurl.com/declaration", ""))' "$labels")
+          test -n "$declared" || { echo "the image states no declaration" >&2; exit 1; }
+          test "platform.swhurl.com/declaration=$declared" = "$SOURCE_LABEL" ||
+            { echo "the image's declaration is not the source's: $declared" >&2; exit 1; }
+          python3 - "$declared" "$ANSWERS" <<'PY'
+          import json, sys
+          document = json.loads(sys.argv[1])
+          answers = dict(pair.split('=', 1) for pair in sys.argv[2].split())
+          kind, runtime = answers['kind'], document['runtime']
+          assert document['schemaVersion'] == 1, document
+          assert runtime['kind'] == kind, (runtime, kind)
+          assert runtime['uid'] > 0, runtime
+          if kind == 'web':
+              assert (runtime['port'], runtime['healthPath']) == (8080, '/healthz'), runtime
+          else:
+              assert 'port' not in runtime and 'healthPath' not in runtime, runtime
+          assert document.get('database') == ('sqlite' if answers['database'] == 'sqlite' else None), document
+          assert document.get('publishes') == (['visited'] if kind == 'web' else ['worked']), document
+          assert document.get('telemetry') is True, document
+          assert document.get('memoryMiB') == 192, document
+          assert 'secrets' not in document, document
+          print(f'declaration of {kind}: {document}')
+          PY
+
       # Each set of answers' tested image, kept for new apps' seed job (above). Only main's: a release tags a main commit.
       - name: Publish the smoke-tested image as new apps' seed (template main)
         if: inputs.template && github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -373,6 +424,7 @@ jobs:
           target: ${{ env.REUSE_ENABLED == 'true' && 'runtime' || '' }}
           platforms: linux/amd64
           push: true
+          labels: ${{ steps.declaration.outputs.labels }}
           tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
           cache-from: ${{ steps.meta.outputs.cache-from }}
 
