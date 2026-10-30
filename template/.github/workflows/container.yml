@@ -11,11 +11,8 @@ on:
 
 permissions:
   contents: read
-  actions: read
   packages: write
 
 jobs:
   app:
-    uses: samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v0.2.20
-    with:
-      reuse-pr-image: true
+    uses: samclement/swhurl-app-template-kotlin/.github/workflows/app.yml@v0.2.21
