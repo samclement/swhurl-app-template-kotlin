@@ -162,7 +162,7 @@ jobs:
       - name: What the image states
         id: declaration
         env:
-          PYTHONPATH: ${ runner.temp }/swhurl-platform/tools
+          PYTHONPATH: ${{ runner.temp }}/swhurl-platform/tools
         run: |
           set -Eeuo pipefail
           label=$(uv run --no-project --with PyYAML==6.0.3 -- python -m swhurl image-declaration --app-dir .)
