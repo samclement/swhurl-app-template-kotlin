@@ -81,6 +81,8 @@ First builds import the template's shared registry cache, with separate tags for
 
 The run that publishes an image builds, tests and smoke-tests it itself, so the tag and the image's `org.opencontainers.image.revision` label name the same commit; a PR image is never republished, and the generated caller grants only `contents: read` and `packages: write`.
 
+The workflow builds the platform's Go declaration producer from an immutable platform revision, using that module's pinned Go version and dependency checksums. Its source and binary stay outside the app's Docker context. `swhurl-v2 image-declaration --app-dir .` reads `swhurl.yaml` and the documents it names; a refusal stops the build before publication, without a Python fallback. Template CI checks the image's version-2 declaration, minimum memory and exact API/events/flags document bytes. uv/Python remains for template-only Copier rendering, and the runner's Python standard library for smoke-test assertions; ordinary app declaration production needs neither uv nor PyYAML.
+
 [Renovate](https://docs.renovatebot.com/) opens the update pull requests; each app's `renovate.json` extends this repository's [`renovate-preset.json`](renovate-preset.json): minor, patch and digest updates merge themselves once every check passes, majors wait for you, and Kotlin and Micronaut plugins are grouped. Keep tests for what the app does; an app without them should set `"automerge": false`.
 
 ## Template updates

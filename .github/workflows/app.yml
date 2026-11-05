@@ -106,13 +106,13 @@ jobs:
 
       # The platform's own reader for the label an image states about itself, which every build carries.
       # Pinned, so changing it is a template change.
-      - name: Checkout the platform's helper commands
+      - name: Checkout the platform's Go producer
         uses: actions/checkout@v7
         with:
           repository: samclement/swhurl-platform
-          ref: 34ceebdc82edb72c7d81cea913ecf06c707a125b
+          ref: 4bc88efee006e24087e613c0ac3394bd5fbae05a
           path: .swhurl-platform
-          sparse-checkout: tools
+          sparse-checkout: v2
           persist-credentials: false
 
       - name: Keep the helper outside the app context
@@ -120,7 +120,21 @@ jobs:
         run: |
           mv .swhurl-platform "$RUNNER_TEMP/swhurl-platform"
 
-      - name: Setup uv
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: ${{ runner.temp }}/swhurl-platform/v2/go.mod
+          cache: false
+
+      - name: Build the declaration producer outside the app context
+        working-directory: ${{ runner.temp }}/swhurl-platform/v2
+        env:
+          GOTOOLCHAIN: local
+          CGO_ENABLED: '0'
+        run: go build -trimpath -o "$RUNNER_TEMP/swhurl-v2" ./cmd/swhurl-v2
+
+      - name: Setup uv (template only)
+        if: inputs.template
         uses: astral-sh/setup-uv@v10.3.3
         with:
           enable-cache: false
@@ -139,14 +153,12 @@ jobs:
 
       # What this image needs, for the platform's image automation: one config label from swhurl.yaml and the
       # events document it names, by the platform's own reader (checked out above). Both builds below carry
-      # it, because a PR's tested image is published unchanged when main merges and the seed is this image.
+      # it; each publishing run builds its own image, and template main also publishes it as a seed.
       - name: What the image states
         id: declaration
-        env:
-          PYTHONPATH: ${{ runner.temp }}/swhurl-platform/tools
         run: |
           set -Eeuo pipefail
-          label=$(uv run --no-project --with PyYAML==6.0.3 -- python -m swhurl image-declaration --app-dir .)
+          label=$("$RUNNER_TEMP/swhurl-v2" image-declaration --app-dir .)
           echo "labels=$label" >> "$GITHUB_OUTPUT"
           echo "- declaration: \`$label\`" >> "$GITHUB_STEP_SUMMARY"
 
@@ -320,11 +332,12 @@ jobs:
           test "platform.swhurl.com/declaration=$declared" = "$SOURCE_LABEL" ||
             { echo "the image's declaration is not the source's: $declared" >&2; exit 1; }
           python3 - "$declared" "$ANSWERS" <<'PY'
-          import json, sys
+          import base64, json, sys
+          from pathlib import Path
           document = json.loads(sys.argv[1])
           answers = dict(pair.split('=', 1) for pair in sys.argv[2].split())
           kind, runtime = answers['kind'], document['runtime']
-          assert document['schemaVersion'] == 1, document
+          assert document['schemaVersion'] == 2, document
           assert runtime['kind'] == kind, (runtime, kind)
           assert runtime['uid'] > 0, runtime
           if kind == 'web':
@@ -336,7 +349,18 @@ jobs:
           assert document.get('telemetry') is True, document
           assert document.get('memoryMiB') == 192, document
           assert 'secrets' not in document, document
-          print(f'declaration of {kind}: {document}')
+          offered_api = kind == 'web' and answers['api'] == 'openapi'
+          assert document.get('apiPath') == ('/openapi.yaml' if offered_api else None), document
+          documents = document['documents']
+          assert set(documents) == ({'api', 'events', 'flags'} if offered_api else {'events', 'flags'}), documents
+          if offered_api:
+              assert base64.b64decode(documents['api'], validate=True) == Path('src/main/resources/openapi.yaml').read_bytes()
+          assert base64.b64decode(documents['events'], validate=True) == Path('src/main/resources/asyncapi.yaml').read_bytes()
+          flags = {'shout': {'type': 'boolean', 'description': 'Say hello in capitals', 'default': False, 'staging': True}}
+          if kind == 'job':
+              flags['fail-run'] = {'type': 'boolean', 'description': 'Make the example run fail, to see a failed run reported', 'default': False}
+          assert base64.b64decode(documents['flags'], validate=True) == (json.dumps(flags, indent=2) + '\n').encode()
+          print(f'declaration of {kind}: version 2, memory and document bytes passed')
           PY
 
       # Each set of answers' tested image, kept for new apps' seed job (above). Only main's: a release tags a main commit.
