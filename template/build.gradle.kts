@@ -37,7 +37,7 @@ dependencies {
     // always match the compiler that Renovate updates in the plugins block.
     implementation(kotlin("reflect"))
     // To name the caller on a span and carry the trace through events; the agent supplies the implementation.
-    implementation("io.opentelemetry:opentelemetry-api:1.67.0")
+    implementation("io.opentelemetry:opentelemetry-api:1.68.0")
     // Events on the platform's NATS (Events.kt).
     implementation("io.nats:jnats:2.26.4")
     // Holds each published event to its schema in asyncapi.yaml, when the app has one (Events.kt).
