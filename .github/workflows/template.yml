@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # The platform's app types (swhurl-platform contract.APP_TYPES): the only answers copier.yml accepts.
+        # The platform's app types (swhurl-platform v2/contract/stacks.json, `types`): the only answers copier.yml accepts.
         # Each is built, smoke-tested and, on main, published as new apps' seed. Keep the first entry first:
         # app.yml's OCI export proof runs for it.
         answers:

@@ -32,7 +32,7 @@ A [Copier](https://copier.readthedocs.io/) template, like the [TypeScript one](h
 
 Every app also has `src/main/resources/asyncapi.yaml`, describing the events it publishes ([AsyncAPI 3](https://www.asyncapi.com/docs)) with an example event (`visited` for web, `worked` otherwise), named in `swhurl.yaml` (`provides.eventsFile`): `events.publish()` refuses an event that is not in the file or a payload that does not fit its schema. An app that publishes nothing keeps the file with no channels. Every app also declares the example feature flag `shout`.
 
-The Template workflow builds each type. A new type, or a changed one, is a line in that matrix, in the validator's list and in the platform's `APP_TYPES`; a changed type keeps its old set in the validator until no app records it.
+The Template workflow builds each type. A new type, or a changed one, is a line in that matrix, in the validator's list and in the platform's `types` (`v2/contract/stacks.json`); a changed type keeps its old set in the validator until no app records it.
 
 A file named `{% if kind == 'web' %}HttpController.kt{% endif %}` exists only for that answer; `*.jinja` files are rendered. `build.gradle.kts` is not a template, so Renovate can update every version in it: it reads the answers from `gradle.properties`, whose `micronautVersion` Renovate updates through a rule in the preset. The Kotlin standard library and `kotlin-reflect` take the Kotlin plugin's version, so one update moves all of Kotlin. Each app keeps `.copier-answers.yml` for later `copier update`.
 

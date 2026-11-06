@@ -47,7 +47,7 @@ api:
     openapi: openapi
   default: "{{ 'openapi' if kind == 'web' else 'none' }}"
   # The last question: the answers together must be one of the platform's app types
-  # (swhurl-platform tools/swhurl/apps/contract.py APP_TYPES), the only sets this template's CI builds.
+  # (swhurl-platform v2/contract/stacks.json, `types`), the only sets this template's CI builds.
   # A type whose answers change keeps its old set here until no app records it.
   validator: >-
     {% set answers = [kind, database, api] | join(' ') %}
