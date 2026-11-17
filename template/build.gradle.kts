@@ -39,7 +39,7 @@ dependencies {
     // To name the caller on a span and carry the trace through events; the agent supplies the implementation.
     implementation("io.opentelemetry:opentelemetry-api:1.68.0")
     // Events on the platform's NATS (Events.kt).
-    implementation("io.nats:jnats:2.26.4")
+    implementation("io.nats:jnats:2.27.0")
     // Holds each published event to its schema in asyncapi.yaml, when the app has one (Events.kt).
     // Versions come from the Micronaut platform, like the Jackson they share with it.
     implementation("com.networknt:json-schema-validator")
