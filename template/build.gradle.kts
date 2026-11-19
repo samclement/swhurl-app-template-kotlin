@@ -58,7 +58,7 @@ dependencies {
     if (database == "sqlite") {
         implementation("org.xerial:sqlite-jdbc:3.54.1.0")
     }
-    otelAgent("io.opentelemetry.javaagent:opentelemetry-javaagent:2.33.1")
+    otelAgent("io.opentelemetry.javaagent:opentelemetry-javaagent:2.34.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
